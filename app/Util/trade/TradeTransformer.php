@@ -2,7 +2,7 @@
 
 namespace App\Transformers\Admin;
 
-use App\Http\Controllers\Components\Admin\AdminTradeState;
+use App\Http\Controllers\Components\TradeState;
 use App\Models\Bookmark;
 use App\Models\CurrentTrade;
 use App\Models\ThreadTrack;
@@ -18,25 +18,22 @@ use League\Fractal;
  */
 class TradeTransformer extends Fractal\TransformerAbstract
 {
-    public function transform(CurrentTrade $currentTrades)
+    public function transform(CurrentTrade $currentTrade)
     {
-        $trade = Trade::with(['job', 'thread', 'contractor'])
-            ->findOrFail($currentTrades->id);
-
-        $groupState = AdminTradeState::getGroupStateByAdminTradeState($trade->state);
-        $outsourcerId = $trade->job->jobRoles[0]->user_id;
+        $groupState = TradeState::getGroupState($currentTrade->state);
+        $outsourcerId = $currentTrade->job->jobRoles[0]->user_id;
     
-        $wallId = Wall::getPersonalWallId($trade->job->id, $trade->contractor_id);
-        $proposedPrice = Trade::getCurrentProposedPrice($trade->job->id, $trade->contractor_id);
-        $quantity = Trade::getCurrentProposedQuantity($trade->job->id, $trade->contractor_id);
-        $currentPaymentPrice = $trade->getCurrentPaymentPrice($proposedPrice, $quantity);
+        $wallId = Wall::getPersonalWallId($currentTrade->job->id, $currentTrade->contractor_id);
+        $proposedPrice = Trade::getCurrentProposedPrice($currentTrade->job->id, $currentTrade->contractor_id);
+        $quantity = Trade::getCurrentProposedQuantity($currentTrade->job->id, $currentTrade->contractor_id);
+        $currentPaymentPrice = $currentTrade->getCurrentPaymentPrice($proposedPrice, $quantity);
         $unreadCount = ThreadTrack::getUnreadCountOfWalls($outsourcerId, [$wallId]);
 
         return [
-            'id' => $trade->id,
-            'job_id' => $trade->job->id,
-            'worker_id' => optional($trade->contractor)->id,
-            'worker_name' => optional($trade->contractor)->username,
+            'id' => $currentTrade->id,
+            'job_id' => $currentTrade->job->id,
+            'worker_id' => optional($currentTrade->contractor)->id,
+            'worker_name' => optional($currentTrade->contractor)->username,
             'state_group_id' => $groupState['state_group_id'],
             'state_group_text' => $groupState['state_group_text'],
             'wall_id' => $wallId,

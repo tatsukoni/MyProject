@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Transformers\Admin;
 
+use App\Http\Controllers\Components\TradeState;
 use App\Domain\Message\MessageService;
-use App\Http\Controllers\Components\Admin\AdminTradeState;
 use App\Models\CurrentTrade;
 use App\Models\DeferringFee;
 use App\Models\Job;
@@ -69,7 +69,7 @@ class ContractorTradeStateTransformerTest extends TestCase
                 'is_deferrable' => $client->deferrable,
                 'deferring_fee_rate' => null,
                 'wall_id' => $wall->id,
-                'state_group_id' => AdminTradeState::ADMIN_WORK,
+                'state_group_id' => TradeState::GROUP_WORK,
                 'state_group_txt' => "作業中",
                 'state_id' => $currentTrade->state,
                 'state_txt' => '作業開始できます',
@@ -136,7 +136,7 @@ class ContractorTradeStateTransformerTest extends TestCase
                 'is_deferrable' => $client->deferrable,
                 'deferring_fee_rate' => $deferringFee->fee,
                 'wall_id' => $wall->id,
-                'state_group_id' => AdminTradeState::ADMIN_WORK,
+                'state_group_id' => TradeState::GROUP_WORK,
                 'state_group_txt' => "作業中",
                 'state_id' => $currentTrade->state,
                 'state_txt' => '作業開始できます',

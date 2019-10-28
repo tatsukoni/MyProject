@@ -3,7 +3,6 @@
 namespace Tests\Unit\Transformers;
 
 use App\Http\Controllers\Components\TradeState;
-use App\Http\Controllers\Components\Admin\AdminTradeState;
 use App\Transformers\Admin\TradeTransformer;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -46,9 +45,7 @@ class TradeTransformerTest extends TestCase
             $client = factory(User::class)->states('client', 'deferrable')->create([
                 'deferring_fee_id' => $deferringFee->id,
             ]);
-            $job = factory(Job::class)->create([
-                'deferrable' => 1
-            ]);
+            $job = factory(Job::class)->states('deferrable')->create();
         } else {
             $deferringFee = null;
             $client = factory(User::class)->states('client', 'prepaid')->create();
@@ -74,12 +71,12 @@ class TradeTransformerTest extends TestCase
         [
             '取引ステータスが「選考」' => [
                 TradeState::STATE_PROPOSAL,
-                AdminTradeState::ADMIN_GROUP_PROPOSAL,
+                TradeState::GROUP_PROPOSAL,
                 '選考中'
             ],
             'カウント対象のデータがある場合' => [
                 TradeState::STATE_PROPOSAL,
-                AdminTradeState::ADMIN_GROUP_PROPOSAL,
+                TradeState::GROUP_PROPOSAL,
                 '選考中',
                 true
             ],
@@ -118,7 +115,7 @@ class TradeTransformerTest extends TestCase
             'foreign_key' => $thread->id,
             'wall_id' => $recordData['wall']->id
         ]);
-        $bookMark = factory(BookMark::class)->states('thread')->create([
+        $bookMark = factory(Bookmark::class)->states('thread')->create([
             'user_id' => $count ? $recordData['client']->id : $recordData['worker']->id,
             'foreign_key' => $thread->id,
         ]);
@@ -151,62 +148,62 @@ class TradeTransformerTest extends TestCase
     // 「応募OK」以降の取引ステータスの場合
     public function provideResponseAfterProposal()
     {
-        return 
+        return
         [
             '取引ステータスが「再発注の検討中」' => [
                 TradeState::STATE_RE_PROPOSAL,
-                AdminTradeState::ADMIN_GROUP_REPROPOSAL,
+                TradeState::GROUP_REPROPOSAL,
                 '継続発注待ち',
                 false
             ],
             '取引ステータスが「作業」' => [
                 TradeState::STATE_WORK,
-                AdminTradeState::ADMIN_WORK,
+                TradeState::GROUP_WORK,
                 '作業中',
                 false
             ],
             '取引ステータスが「単価変更交渉」' => [
                 TradeState::STATE_NEGOTIATION_BY_CONTRACTOR,
-                AdminTradeState::ADMIN_GROUP_NEGOTIATION,
+                TradeState::GROUP_NEGOTIATION,
                 '単価変更依頼中',
                 false,
                 TradeState::ACTION_NEGOTIATE
             ],
             '取引ステータスが「納品数変更交渉」' => [
                 TradeState::STATE_QUANTITY_BY_OUTSOURCER,
-                AdminTradeState::ADMIN_GROUP_QUANTITY,
+                TradeState::GROUP_QUANTITY,
                 '数量変更依頼中',
                 false,
                 TradeState::ACTION_QUANTITY
             ],
             '取引ステータスが「取引中止要請」' => [
                 TradeState::STATE_CANCEL_BY_CONTRACTOR,
-                AdminTradeState::ADMIN_GROUP_CANCEL,
+                TradeState::GROUP_CANCEL,
                 '取引中止依頼中',
                 false,
                 TradeState::ACTION_CANCEL
             ],
             '取引ステータスが「納品」' => [
                 TradeState::STATE_DELIVERY,
-                AdminTradeState::ADMIN_GROUP_DELIVERY,
+                TradeState::GROUP_DELIVERY,
                 '納品中',
                 false
             ],
             '取引ステータスが「評価」' => [
                 TradeState::STATE_FINISH,
-                AdminTradeState::ADMIN_GROUP_FINISH,
+                TradeState::GROUP_FINISH,
                 '評価中',
                 false
             ],
             '取引ステータスが「取引完結（正常終了）」' => [
                 TradeState::STATE_CLOSED,
-                AdminTradeState::ADMIN_GROUP_CLOSED,
+                TradeState::GROUP_CLOSED,
                 '取引終了',
                 true
             ],
             '取引ステータスが「取引の終了（受注を断った場合など）」' => [
                 TradeState::STATE_TERMINATED,
-                AdminTradeState::ADMIN_GROUP_ABNORMALCLOSED,
+                TradeState::GROUP_TERMINATED,
                 '取引中止',
                 true
             ],
@@ -254,7 +251,7 @@ class TradeTransformerTest extends TestCase
                 'foreign_key' => $thread->id,
                 'wall_id' => $recordData['wall']->id
             ]);
-            $bookMark = factory(BookMark::class)->states('thread')->create([
+            $bookMark = factory(Bookmark::class)->states('thread')->create([
                 'user_id' => $recordData['worker']->id,
                 'foreign_key' => $thread->id,
             ]);
@@ -314,7 +311,7 @@ class TradeTransformerTest extends TestCase
             'foreign_key' => $thread->id,
             'wall_id' => $recordData['wall']->id
         ]);
-        $bookMark = factory(BookMark::class)->states('thread')->create([
+        $bookMark = factory(Bookmark::class)->states('thread')->create([
             'user_id' => $recordData['worker']->id,
             'foreign_key' => $thread->id,
         ]);
@@ -333,7 +330,7 @@ class TradeTransformerTest extends TestCase
                 'job_id' => $recordData['job']->id,
                 'worker_id' => $recordData['worker']->id,
                 'worker_name' => $recordData['worker']->username,
-                'state_group_id' => AdminTradeState::ADMIN_WORK,
+                'state_group_id' => TradeState::GROUP_WORK,
                 'state_group_text' => '作業中',
                 'wall_id' => $recordData['wall']->id,
                 'current_proposed_price' => $proposedTrade->proposed_price,

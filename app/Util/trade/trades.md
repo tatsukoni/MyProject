@@ -16,16 +16,17 @@ page|任意|ページ番号|2(デフォルト:1)
 
 id|グループ
 ---|---
+---|---
 1|選考中
+6|作業中
+3|納品中
+4|評価中
+5|取引終了(正常)
 2|継続発注待ち
-3|作業中
-4|単価変更依頼中
-5|数量変更依頼中
-6|取引中止依頼中
-7|納品中
-8|評価中
-9|取引終了(正常)
-10|取引途中終了・中止
+8|単価変更依頼中
+9|数量変更依頼中
+10|取引中止依頼中
+11|取引途中終了・中止
 
 ## Result
 
@@ -35,7 +36,7 @@ id|trades.id|
 job_id|仕事ID|
 worker_id|ワーカーのユーザーID|
 worker_name|ワーカーのユーザー名|
-state_group_id|取引ステータスID|AdminTradeStateComponent::STATE_GROUPS
+state_group_id|取引ステータスID|TradeStateComponent::STATE_GROUPS
 state_group_text|取引ステータス|
 wall_id|walls.id|個別連絡ボードのウォールID
 current_proposed_price|現在の予定単価
@@ -64,7 +65,7 @@ pinned_count|ピンしたメッセージ数|クライアントがピンしたメ
         "job_id": 1001,
         "worker_id": 3001,
         "worker_name": "aqua",
-        "state_group_id": 3,
+        "state_group_id": 6,
         "state_group_text": "作業中",
         "wall_id": 2001,
         "current_proposed_price": 10,
@@ -81,7 +82,7 @@ pinned_count|ピンしたメッセージ数|クライアントがピンしたメ
         "job_id": 1001,
         "worker_id": 3002,
         "worker_name": "aqua2",
-        "state_group_id": 3,
+        "state_group_id": 6,
         "state_group_text": "作業中",
         "wall_id": 2002,
         "current_proposed_price": 10,
@@ -98,7 +99,7 @@ pinned_count|ピンしたメッセージ数|クライアントがピンしたメ
         "job_id": 1001,
         "worker_id": 3003,
         "worker_name": "aqua3",
-        "state_group_id": 3,
+        "state_group_id": 6,
         "state_group_text": "作業中",
         "wall_id": 2003,
         "current_proposed_price": 10,
