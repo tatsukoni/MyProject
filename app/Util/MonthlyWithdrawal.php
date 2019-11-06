@@ -9,12 +9,9 @@ use App\Models\PointLog;
 use App\Services\PaymentService\PaymentClient;
 use Carbon\Carbon;
 use DB;
-use Exception;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
-use Log;
 use Mail;
-use PaymentService\Client;
 
 class MonthlyWithdrawal extends BaseJob
 {
@@ -30,12 +27,12 @@ class MonthlyWithdrawal extends BaseJob
     protected $failGetBunkId = false; // bank_idの取得に失敗したレコードがある場合true
 
     // 結果ごとに処理を分けるためのコード番号
-    const INVALID_TARGET_DATE = 1;
-    const NOT_EXIST_MONTHLY_WITHDRAWAL = 2;
+    const NOT_EXIST_MONTHLY_WITHDRAWAL = 1;
+    const MAX_COUNT_MONTHLY_WITHDRAWAL = 2;
     const FAIL_GET_BANK_ID = 3;
     const SUCCESS_MONTHLY_WITHDRAWAL = 4;
 
-    const TIMEOUT = 30;
+    const MAX_DATA_COUNT = 1000; // 取得するデータ件数の上限値
 
     /**
      * Create new job instance.
@@ -48,14 +45,6 @@ class MonthlyWithdrawal extends BaseJob
     {
         $this->startDate = $startDate;
         $this->endDate = $endDate;
-
-        $options = [
-            'timeout' => self::TIMEOUT,
-            'connect_timeout' => self::TIMEOUT
-        ];
-        $token = config('shufti.payment_service.api_token');
-        $endpoint = config('shufti.payment_service.api_endpoint');
-        Client::config($token, $endpoint, $options);
     }
 
     /**
@@ -65,22 +54,14 @@ class MonthlyWithdrawal extends BaseJob
      */
     public function handle()
     {
-        // 月跨ぎの出金に該当する口座情報の一時テーブルを取得
-        $conditions = [
-            'paid_at' => [">={$this->startDate}", "<{$this->endDate}"],
-            'status' => PaymentClient::WITHDRAWAL_STATUS_SUCCESS,
-            'include' => 'bank',
-        ];
-        $tableName = $this->createBankTemporaryTable($conditions);
-        if (! $tableName) {
-            $this->sendMail(self::FAIL_GET_BANK_ID);
+        // 月跨ぎの出金に該当する情報を取得
+        $records = $this->getMonthlyWithdrawal();
+        if ($records->count() === 0) { // 該当するデータ件数が0件
+            $this->sendMail(self::NOT_EXIST_MONTHLY_WITHDRAWAL);
             return;
         }
-
-        // 月跨ぎの出金に該当する情報を取得し、一時テーブルとの紐付けを行う
-        $records = $this->getMonthlyWithdrawal($tableName);
-        if ($records->count() === 0) {
-            $this->sendMail(self::NOT_EXIST_MONTHLY_WITHDRAWAL);
+        if ($records->count() >= self::MAX_DATA_COUNT) { // 該当するデータ件数が上限（1000件）以上
+            $this->sendMail(self::MAX_COUNT_MONTHLY_WITHDRAWAL);
             return;
         }
 
@@ -97,113 +78,26 @@ class MonthlyWithdrawal extends BaseJob
     }
 
     /**
-     * 指定された日付で、月跨ぎの出金に該当する口座情報の一時テーブルを取得する
-     *
-     * @param Array $conditions
-     */
-    public function createBankTemporaryTable(Array $conditions)
-    {
-        // 一時テーブルの作成
-        $tableName = 'monthly_withdrows_payment' . uniqid();
-        if (! $this->createTemporaryTable($tableName)) {
-            Log::error(__METHOD__ . ': 一時テーブルの作成に失敗しました。テーブル名: ' . $tableName);
-            return false;
-        }
-
-        // pageごとに、出金された口座情報を取得
-        try {
-            $page = 1;
-            while (true) {
-                $conditions['page'] = $page;
-                $withdrawals = $this->getWithdrawals($conditions);
-                if (empty($withdrawals)) {
-                    break;
-                }
-
-                $convertWithdrawals = $this->convertWithdrawals($withdrawals, $tableName);
-                if (! $convertWithdrawals) {
-                    Log::error(__METHOD__ . ': 出金情報の取得に失敗しました。テーブル名: ' . $tableName);
-                    $tableName = false;
-                    break;
-                }
-
-                $page++;
-            }
-        } catch (Exception $e) {
-            Log::error($e);
-            $tableName = false;
-        }
-
-        return $tableName;
-    }
-
-    private function createTemporaryTable(string $tableName)
-    {
-        $ddl = <<<__DDL__
-CREATE TEMPORARY TABLE IF NOT EXISTS $tableName (
-    id integer not null primary key,
-    bank_id integer,
-    user_id integer
-)
-__DDL__;
-
-        return DB::insert(DB::raw($ddl));
-    }
-
-    private function getWithdrawals(Array $conditions)
-    {
-        try {
-            $withdrawals = \PaymentService\Withdrawal::all($conditions);
-        } catch (Exception $e) {
-            Log::error($e);
-            return false;
-        }
-        return $withdrawals->toArray();
-    }
-
-    private function convertWithdrawals(Array $withdrawals, string $tableName)
-    {
-        foreach ($withdrawals as $withdrawal) {
-            $id = $withdrawal['id'];
-            $bankId = $withdrawal['bank_id'];
-            $userId = optional($withdrawal['bank'])->user_id;
-
-            $insert = DB::table($tableName)->insert([
-                'id' => $id,
-                'bank_id' => $bankId,
-                'user_id' => $userId
-            ]);
-
-            if (! $insert) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
      * 指定された日付で、月跨ぎの出金に該当する情報を取得する
      *
      * @return Collection
      */
-    public function getMonthlyWithdrawal(string $tableName): Collection
+    public function getMonthlyWithdrawal(): Collection
     {
-        $records = DB::table($tableName)
+        $record = DB::table('point_logs')
             ->select('users.id as user_id')
             ->AddSelect('users.view_mode')
             ->AddSelect('point_details.account_title_id')
             ->AddSelect('point_details.withdrawal')
             ->AddSelect(DB::raw("convert_tz(point_logs.created, '+0:00', '+09:00') AS created"))
-            ->AddSelect(DB::raw("$tableName" . '.bank_id'))
-            ->join('users', 'users.id', '=', "$tableName" . '.user_id')
             ->join('point_details', function ($join) {
-                $join->on('point_details.user_id', '=', 'users.id')
+                $join->on('point_details.point_log_id', '=', 'point_logs.id')
                      ->where('account_id', PointDetail::ESCROW_ACCOUNT);
             })
-            ->join('point_logs', function ($join) {
-                $join->on('point_logs.id', '=', 'point_details.point_log_id')
-                     ->where('detail', PointLog::PERMIT_POINTS_CONVERSION);
+            ->join('users', function ($join) {
+                $join->on('users.id', '=', 'point_details.user_id');
             })
+            ->where('point_logs.detail', PointLog::PERMIT_POINTS_CONVERSION)
             ->whereRaw(
                 "convert_tz(point_logs.created, '+0:00', '+09:00') >= ?",
                 $this->startDate
@@ -215,7 +109,7 @@ __DDL__;
             ->orderBy('users.view_mode', 'asc')
             ->orderBy('users.id', 'asc');
 
-        return $records->get();
+        return $record->get();
     }
 
     /**
@@ -226,6 +120,7 @@ __DDL__;
      */
     public function generateResultsArray(Collection $records): array
     {
+        $paymentClient = resolve(PaymentClient::class);
         $resultArray = [];
 
         foreach ($records as $record) {
@@ -234,9 +129,10 @@ __DDL__;
             // 出金種別の設定
             $accountTitle = ($record->account_title_id == PointDetail::PAYMENT) ? '出金額' : '換金手数料';
             // 口座idの取得
-            if (! is_null($record->bank_id)) {
-                $bankId = $record->bank_id;
-                $gmoBankId = '001-000' . $bankId;
+            $bank = $paymentClient->getBankAccount($record->user_id);
+            if (! is_null($bank)) {
+                $bankId = $bank->id;
+                $gmoBankId = $this->generateGmoBankId($bankId) . $bankId;
             } else {
                 $this->failGetBunkId = true;
                 $bankId = '口座未設定もしくは取得失敗';
@@ -257,6 +153,29 @@ __DDL__;
         return $resultArray;
     }
 
+    private function generateGmoBankId(int $bankId): string
+    {
+        $gmoBankIdHead = '001-';
+        $bankIdLength = strlen($bankId);
+        if ($bankIdLength >= 8) {
+            return $gmoBankIdHead;
+        }
+
+        $targetCount = 8 - $bankIdLength;
+        $executeCount = 1;
+        // 桁数の数に応じて、0を付与する
+        while (true) {
+            $gmoBankIdHead .= '0';
+            if ($executeCount === $targetCount) {
+                break;
+            }
+
+            $executeCount++;
+        }
+
+        return $gmoBankIdHead;
+    }
+
     public function getCsv(array $resultArray): string
     {
         $stream = fopen('php://temp', 'w');
@@ -268,7 +187,7 @@ __DDL__;
         }
 
         rewind($stream);
-        $csv = stream_get_contents($stream);
+        $csv = mb_convert_encoding(str_replace(PHP_EOL, "\r\n", stream_get_contents($stream)), 'SJIS-win', 'UTF-8');
         fclose($stream);
 
         return $csv;
@@ -276,11 +195,12 @@ __DDL__;
 
     private function sendMail(int $resultCode, string $csv = null): void
     {
-        $fileName = Carbon::parse($this->startDate)->format('Ym') . 'monthly_withdrawals_result.csv';
+        $targetMonth = Carbon::parse($this->startDate)->subMonth()->format('Ym');
+        $fileName = $targetMonth . 'monthly_withdrawals_result.csv';
         $options = [
             'mime' => 'text/csv'
         ];
-        Mail::queue(new MonthlyWithdrawalReport(
+        Mail::send(new MonthlyWithdrawalReport(
             $resultCode,
             $csv,
             $fileName,
