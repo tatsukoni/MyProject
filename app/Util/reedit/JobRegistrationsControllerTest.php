@@ -21,7 +21,9 @@ use App\Models\Environment;
 use App\Models\Job;
 use App\Models\JobTag;
 use App\Models\JobRole;
+use App\Models\JobDetailRegisterItem;
 use App\Models\JobTemporarinessDoc;
+use App\Models\JobDetailWritingItem;
 use App\Models\NgWord;
 use App\Models\OutsourcerRank;
 use App\Models\Partner;
@@ -948,13 +950,14 @@ class JobRegistrationsControllerTest extends TestCase
         Mail::assertNotQueued(\App\Mail\Mails\Deposit\CaughtDeposit::class);
     }
 
+    // start
     /**
      * タスクの仕事を更新する際に共通化できるデータを作成
-     * 
-     * @param string $isDefaultTaskType = true
+     *
      */
-    public function createTaskPut200Data(bool $isDefaultTaskType = true)
+    public function createTaskPut200Data()
     {
+        // ArrangeData
         $client = factory(User::class)->states('client')->create();
 
         $s3ClientMock = $this->getS3ClientMock();
@@ -962,30 +965,169 @@ class JobRegistrationsControllerTest extends TestCase
         $s3ClientMock->shouldReceive('getS3ObjectUrlByPath')->times(1)->andReturn('http://hoge/fuga');
         $s3ClientMock->shouldReceive('deleteS3Object')->times(1)->andReturn(true);
 
-        // 仕事
-        if ($isDefaultTaskType) {
-            $job = factory(Job::class)->states('task', 'not_active', 're_edit')->create();
-            $defaultJobTypeTable = factory(Task::class)->create(
-                ['job_id' => $job->id]
-            );
-            $s3DocModel = Job::S3_PATH_TASK;
-            $s3DocForeignKey = $defaultJobTypeTable->id;
-        } else {
+        // 歓迎スキル
+        $businessSkillGenre = factory(BusinessSkillGenre::class)->create();
+        $businessSkills = factory(BusinessSkill::class, 2)->create([
+            'business_skill_genre_id' => $businessSkillGenre->id
+        ]);
+
+        // 下書きデータ
+        $step1Value = $this->getStep1TaskValue();
+        $step2Value = $this->getStep2TaskValue();
+        $step4Value = $this->getStep4Value();
+
+        // AssertData
+        $assertJsonData = [
+            'data' => [
+                'attributes' => [
+                    'name' => $step2Value['name'],
+                    'type' => $step1Value['type'],
+                    'detail' => $step2Value['detail'],
+                    'recruiting' => false,
+                    'activated' => false,
+                    're_edit' => false,
+                    'rejected' => false,
+                    'closed' => false,
+                    'limited_type_id' => Job::LIMIT_TYPE_PUBLIC,
+                    'wall_id' => null,
+                    'client_id' => $client->id,
+                    'client_name' => $client->username,
+                    'client_thumbnail' => $client->thumbnail_url,
+                    's3_docs' => [],
+                    'job_tags' => [],
+                    'business_categories' => [ // 個別のテストで上書きされる
+                        [
+                            'id' => null,
+                            'name' => null,
+                            'link' => null,
+                            'child_categories' => [
+                                [
+                                    'id' => null,
+                                    'name' => null,
+                                    'link' => null
+                                ]
+                            ]
+                        ]
+                    ],
+                    'business_skills' => [
+                        [
+                            'id' => $businessSkillGenre->id,
+                            'name' => $businessSkillGenre->name,
+                            'businessSkills' => [
+                                [
+                                    'id' => $businessSkills[0]->id,
+                                    'name' => $businessSkills[0]->name,
+                                ],
+                                [
+                                    'id' => $businessSkills[1]->id,
+                                    'name' => $businessSkills[1]->name,
+                                ]
+                            ]
+                        ]
+                    ],
+                    'prefectures' => [],
+                    'business_careers' => [],
+                    'unit_price' => $step2Value['unit_price'],
+                    'recruitment_count' => '0/' . $step2Value['quantity'],
+                    'task' => [
+                        'type' => 1, // 通常のタスク
+                        'sagooo_link' => null,
+                        'sagooo_published' => null,
+                        'sagooo_example' => null,
+                        'conditions' => [
+                            [
+                                'item_name' => '質問数',
+                                'txt_list' => '2問'
+                            ],
+                            [
+                                'item_name' => 'うち必須回答',
+                                'txt_list' => '1問'
+                            ],
+                            [
+                                'item_name' => '回答条件',
+                                'txt_list' => [
+                                    [
+                                        'txt' => '質問2',
+                                        'detail' => [
+                                            '10文字以上 1,000文字以下',
+                                            sprintf(
+                                                '「%s」を%d回以上利用',
+                                                $step2Value['questions'][1]['keywords'][0]['keyword'],
+                                                number_format($step2Value['questions'][1]['keywords'][0]['repeat_count'])
+                                            ),
+                                            sprintf(
+                                                '「%s」を%d回以上利用',
+                                                $step2Value['questions'][1]['keywords'][1]['keyword'],
+                                                $step2Value['questions'][1]['keywords'][1]['repeat_count']
+                                            )
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ],
+                    'unimedia_task' => []
+                ]
+            ]
+        ];
+
+        return compact(
+            'client',
+            's3ClientMock',
+            'step1Value',
+            'step2Value',
+            'step4Value'
+        );
+    }
+
+    public function providePut200()
+    {
+        return
+        [
+            'STEP-1で仕事タイプを変更しなかった場合' => [
+                false
+            ],
+            'STEP-1で仕事タイプを変更した場合' => [
+                true
+            ]
+        ];
+    }
+
+    /**
+     * タスクタイプの仕事を更新する場合のテスト
+     *
+     * @dataProvider providePut200
+     *
+     * @param bool $isChangeJobType
+     */
+    public function testTaskPut200(bool $isChangeJobType)
+    {
+        // Arrange
+        $testingData = $this->createTaskPut200Data();
+
+        // 仕事を作成
+        if ($isChangeJobType) { // STEP-1で仕事タイプを変更した場合
             $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create();
             $defaultJobTypeTable = factory(TradeParameter::class)->create(
                 ['job_id' => $job->id]
             );
             $s3DocModel = Job::S3_PATH_PROJECT;
-            $s3DocForeignKey = $defaultJobTypeTable->id;
+        } else { // STEP-1で仕事タイプを変更しなかった場合
+            $job = factory(Job::class)->states('task', 'not_active', 're_edit')->create();
+            $defaultJobTypeTable = factory(Task::class)->create(
+                ['job_id' => $job->id]
+            );
+            $s3DocModel = Job::S3_PATH_TASK;
         }
-
         factory(JobRole::class)->create(
             [
-                'user_id' => $client->id,
+                'user_id' => $testingData['client']->id,
                 'job_id' => $job->id,
                 'role_id' => JobRole::OUTSOURCER
             ]
         );
+
+        // 既存の添付ファイルのデータを作成
         $path = 'hoge/fuga';
         $name = "file_old.txt";
         factory(S3Doc::class)->create(
@@ -993,26 +1135,20 @@ class JobRegistrationsControllerTest extends TestCase
                 's3_path' => $path,
                 'filename' => $name,
                 'model' => $s3DocModel,
-                'foreign_key' => $s3DocForeignKey
+                'foreign_key' => $defaultJobTypeTable->id
             ]
         );
-        $s3ClientMock->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
+        $testingData['s3ClientMock']->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
 
-        $businessCategoryParent = factory(BusinessCategory::class)->create();
-        $businessCategoryChild = factory(BusinessCategory::class)->create(
-            ['parent_id' => $businessCategoryParent->id]
-        );
-        $businessSkillGenre = factory(BusinessSkillGenre::class)->create();
-        $businessSkills = factory(BusinessSkill::class, 2)->create([
-            'business_skill_genre_id' => $businessSkillGenre->id
-        ]);
+        // 仕事カテゴリーのデータを作成
+        $businessCategoryParent = factory(BusinessCategory::class)->states('task')->create();
+        $businessCategoryChild = factory(BusinessCategory::class)->states('task_entry')->create();
 
-        // 下書きデータ
+        // 下書きデータを作成
         $idFormat = Temporariness::JOB_REEDIT_ID_FORMAT;
         // STEP1
-        $step1Value = $this->getStep1TaskValue();
-        $step1Value['job_id'] = $job->id;
-        $step1Value['business_category_id'] = $businessCategoryChild->id;
+        $testingData['step1Value']['job_id'] = $job->id;
+        $testingData['step1Value']['business_category_id'] = $businessCategoryChild->id;
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1020,15 +1156,14 @@ class JobRegistrationsControllerTest extends TestCase
                     1,
                     $job->id
                 ),
-                'value' => json_encode($step1Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step1Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
-        // STEP2
-        $step2Value = $this->getStep2TaskValue();
-        $step2Value['job_id'] = $job->id;
-        $step2Value['job_tag_ids'] = [];
 
+        // STEP2
+        $testingData['step2Value']['job_id'] = $job->id;
+        $testingData['step2Value']['job_tag_ids'] = [];
         $step2 = factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1036,8 +1171,8 @@ class JobRegistrationsControllerTest extends TestCase
                     2,
                     $job->id
                 ),
-                'value' => json_encode($step2Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step2Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
 
@@ -1050,7 +1185,7 @@ class JobRegistrationsControllerTest extends TestCase
                     $job->id
                 ),
                 'value' => json_encode(['step_id' => 3, 'job_id' => $job->id]),
-                'user_id' => $client->id
+                'user_id' => $testingData['client']->id
             ]
         );
         $path = 'foo';
@@ -1062,13 +1197,11 @@ class JobRegistrationsControllerTest extends TestCase
                 'temporariness_id' => $step3->id
             ]
         );
-        $s3ClientMock->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
+        $testingData['s3ClientMock']->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
 
         // STEP4
-        $step4Value = $this->getStep4Value();
-        $step4Value['job_id'] = $job->id;
-        $step4Value['business_skill_ids'] = $businessSkills->pluck('id')->all();
-
+        $testingData['step4Value']['job_id'] = $job->id;
+        $testingData['step4Value']['business_skill_ids'] = $testingData['businessSkills']->pluck('id')->all();
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1076,139 +1209,46 @@ class JobRegistrationsControllerTest extends TestCase
                     4,
                     $job->id
                 ),
-                'value' => json_encode($step4Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step4Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
 
-        return compact(
-            'client',
-            'job',
-            'defaultJobTypeTable',
-            'businessCategoryParent',
-            'businessCategoryChild',
-            'businessSkillGenre',
-            'businessSkills',
-            'step2',
-            'step1Value',
-            'step2Value',
-            'step4Value'
-        );
-    }
-
-    public function testTaskPut200()
-    {
-        // Arrange
-        $testingData = $this->createTaskPut200Data();
-
-        $this->setUrl($testingData['client'], $testingData['job']->id);
+        $this->setUrl($testingData['client'], $job->id);
         $this->setAuthHeader($testingData['client']);
 
         // Act & Assert
         $response = $this->put($this->url, [], $this->headers);
         $response->assertStatus(200);
-        $response->assertJson(
-            [
-                'data' => [
-                    'attributes' => [
-                        'name' => $testingData['step2Value']['name'],
-                        'type' => $testingData['step1Value']['type'],
-                        'detail' => $testingData['step2Value']['detail'],
-                        'recruiting' => false,
-                        'activated' => false,
-                        're_edit' => false,
-                        'rejected' => false,
-                        'closed' => false,
-                        'limited_type_id' => Job::LIMIT_TYPE_PUBLIC,
-                        'wall_id' => null,
-                        'client_id' => $testingData['client']->id,
-                        'client_name' => $testingData['client']->username,
-                        'client_thumbnail' => $testingData['client']->thumbnail_url,
-                        's3_docs' => [],
-                        'job_tags' => [],
-                        'business_categories' => [
-                            [
-                                'id' => $testingData['businessCategoryParent']->id,
-                                'name' => $testingData['businessCategoryParent']->name,
-                                'link' => $testingData['businessCategoryParent']->parent_name,
-                                'child_categories' => [
-                                    [
-                                        'id' => $testingData['businessCategoryChild']->id,
-                                        'name' => $testingData['businessCategoryChild']->name,
-                                        'link' => $testingData['businessCategoryChild']->parent_name
-                                    ]
+        // assertDataの上書き
+        $testingData['assertJsonData'] = [
+            'data' => [
+                'attributes' => [
+                    'business_categories' => [
+                        [
+                            'id' => $businessCategoryParent->id,
+                            'name' => $businessCategoryParent->name,
+                            'link' => $businessCategoryParent->parent_name,
+                            'child_categories' => [
+                                [
+                                    'id' => $businessCategoryChild->id,
+                                    'name' => $businessCategoryChild->name,
+                                    'link' => $businessCategoryChild->parent_name
                                 ]
                             ]
-                        ],
-                        'business_skills' => [
-                            [
-                                'id' => $testingData['businessSkillGenre']->id,
-                                'name' => $testingData['businessSkillGenre']->name,
-                                'businessSkills' => [
-                                    [
-                                        'id' => $testingData['businessSkills'][0]->id,
-                                        'name' => $testingData['businessSkills'][0]->name,
-                                    ],
-                                    [
-                                        'id' => $testingData['businessSkills'][1]->id,
-                                        'name' => $testingData['businessSkills'][1]->name,
-                                    ]
-                                ]
-                            ]
-                        ],
-                        'prefectures' => [],
-                        'business_careers' => [],
-                        'unit_price' => $testingData['step2Value']['unit_price'],
-                        'recruitment_count' => '0/' . $testingData['step2Value']['quantity'],
-                        'task' => [
-                            'type' => 1, // 通常のタスク
-                            'sagooo_link' => null,
-                            'sagooo_published' => null,
-                            'sagooo_example' => null,
-                            'conditions' => [
-                                [
-                                    'item_name' => '質問数',
-                                    'txt_list' => '2問'
-                                ],
-                                [
-                                    'item_name' => 'うち必須回答',
-                                    'txt_list' => '1問'
-                                ],
-                                [
-                                    'item_name' => '回答条件',
-                                    'txt_list' => [
-                                        [
-                                            'txt' => '質問2',
-                                            'detail' => [
-                                                '10文字以上 1,000文字以下',
-                                                sprintf(
-                                                    '「%s」を%d回以上利用',
-                                                    $testingData['step2Value']['questions'][1]['keywords'][0]['keyword'],
-                                                    number_format($testingData['step2Value']['questions'][1]['keywords'][0]['repeat_count'])
-                                                ),
-                                                sprintf(
-                                                    '「%s」を%d回以上利用',
-                                                    $testingData['step2Value']['questions'][1]['keywords'][1]['keyword'],
-                                                    $testingData['step2Value']['questions'][1]['keywords'][1]['repeat_count']
-                                                )
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ],
-                        'unimedia_task' => []
+                        ]
                     ]
                 ]
             ]
-        );
+        ];
+        $response->assertJson($testingData['assertJsonData']);
 
         // 編集前の添付ファイルが削除されている
         $name = "file_old.txt";
         $this->assertDatabaseMissing(
             's3_docs',
             [
-                'model' => Job::S3_PATH_TASK,
+                'model' => $s3DocModel,
                 'filename' => 'file_old.txt'
             ]
         );
@@ -1217,10 +1257,11 @@ class JobRegistrationsControllerTest extends TestCase
         $this->assertDatabaseMissing(
             'job_temporariness_docs',
             [
-                'temporariness_id' => $testingData['step2']->id,
+                'temporariness_id' => $step2->id,
                 'filename' => 'file_old.txt'
             ]
         );
+
         // s3_docs がある
         $this->assertDatabasehas(
             's3_docs',
@@ -1229,140 +1270,320 @@ class JobRegistrationsControllerTest extends TestCase
                 'filename' => 'file_new.png'
             ]
         );
+
+        // STEP-1で仕事タイプを変更した場合
+        if ($isChangeJobType) {
+            // trade_parametersが消えている
+            $this->assertDatabaseMissing(
+                'trade_parameters',
+                [
+                    'id' => $defaultJobTypeTable->id,
+                    'job_id' => $job->id
+                ]
+            );
+
+            // tasksが作成されている
+            $this->assertDatabasehas(
+                'tasks',
+                [
+                    'job_id' => $job->id,
+                    'unit_price' => $testingData['step2Value']['unit_price'],
+                    'quantity' => $testingData['step2Value']['quantity']
+                ]
+            );
+
+            // jobsの仕事タイプが更新されている
+            $this->assertDatabasehas(
+                'jobs',
+                [
+                    'id' => $job->id,
+                    'type' => Job::TYPE_TASK
+                ]
+            );
+        }
     }
 
-    // 差し戻し編集時、仕事タイプをプロジェクトからタスクに変更した場合
-    public function testPut200ProjectToTaks()
+    // STEP-1で仕事カテゴリーを変更した場合のテスト
+    public function providePut200ChangeCategoryTask()
     {
-        // Arrange
-        $testingData = $this->createTaskPut200Data(false);
+        return
+        [
+            '「ライティング」→「事務作業」（その他のカテゴリー）に変更した場合' => [
+                'writing',
+                'writing_blog',
+                'task',
+                'task_entry'
+            ],
+            '「商品登録」→「事務作業」（その他のカテゴリー）に変更した場合' => [
+                'task',
+                'task_register',
+                'task',
+                'task_entry'
+            ],
+            '「事務作業」（その他のカテゴリー）→「ライティング」に変更した場合' => [
+                'task',
+                'task_entry',
+                'writing',
+                'writing_blog'
+            ],
+            '「商品登録」→「ライティング」に変更した場合' => [
+                'task',
+                'task_register',
+                'writing',
+                'writing_blog'
+            ]
+        ];
+    }
 
-        $this->setUrl($client, $job->id);
-        $this->setAuthHeader($client);
+    /**
+     * STEP-1で仕事カテゴリーを変更した場合のテスト
+     * プロジェクトでしか選択できない仕事タイプがあるので、変更前の仕事タイプはプロジェクト
+     * 「商品登録」はプロジェクトでしか選択できないので、変更後に商品登録が選択されるパターンはここでは想定しない
+     *
+     * @dataProvider providePut200ChangeCategoryTask
+     *
+     * @param string $beforeParentCategory
+     * @param string $beforeChildCategory
+     * @param string $afterParentCategory
+     * @param string $afterChildCategory
+     */
+    public function testPut200ChangeCategoryTask(
+        string $beforeParentCategory,
+        string $beforeChildCategory,
+        string $afterParentCategory,
+        string $afterChildCategory
+    ) {
+        // Arrange
+        $testingData = $this->createTaskPut200Data();
+
+        // 変更前の仕事カテゴリー
+        $beforeChildBusinessCategory = factory(BusinessCategory::class)->states($beforeChildCategory)->create();
+
+        // 仕事を作成
+        if ($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register') {
+            $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
+                'business_category_id' => $beforeChildBusinessCategory->id,
+                'prohibitions' => [
+                    '禁止事項1',
+                    '禁止事項2'
+                ],
+                'recommend' => [
+                    'オススメ1',
+                    'オススメ2'
+                ],
+                'teachme' => [
+                    '教えて欲しいこと1',
+                    '教えて欲しいこと2'
+                ],
+                'pr_message' => [
+                    'PRメッセージ'
+                ]
+            ]);
+        } else {
+            $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
+                'business_category_id' => $beforeChildBusinessCategory->id
+            ]);
+        }
+        $defaultJobTypeTable = factory(TradeParameter::class)->create(
+            ['job_id' => $job->id]
+        );
+        factory(JobRole::class)->create(
+            [
+                'user_id' => $testingData['client']->id,
+                'job_id' => $job->id,
+                'role_id' => JobRole::OUTSOURCER
+            ]
+        );
+
+        // 変更前の仕事カテゴリーがライティングに属する場合は、job_detail_writing_itemsを作成する
+        if ($beforeParentCategory === 'writing') {
+            factory(JobDetailWritingItem::class)->create([
+                'job_id' => $job->id
+            ]);
+        }
+        // 変更前の仕事カテゴリーが商品登録の場合は、job_detail_register_itemsを作成する
+        if ($beforeChildCategory === 'task_register') {
+            factory(JobDetailRegisterItem::class)->create([
+                'job_id' => $job->id
+            ]);
+        }
+
+        // 既存の添付ファイルのデータを作成
+        $path = 'hoge/fuga';
+        $name = "file_old.txt";
+        factory(S3Doc::class)->create(
+            [
+                's3_path' => $path,
+                'filename' => $name,
+                'model' => Job::S3_PATH_PROJECT,
+                'foreign_key' => $defaultJobTypeTable->id
+            ]
+        );
+        $testingData['s3ClientMock']->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
+
+        // 変更後の仕事カテゴリー
+        $afterParentBussinessCategory = factory(BusinessCategory::class)->states($afterParentCategory)->create();
+        $afterChildBusinessCategory = factory(BusinessCategory::class)->states($afterChildCategory)->create();
+
+        // 下書きデータを作成
+        $idFormat = Temporariness::JOB_REEDIT_ID_FORMAT;
+        // STEP1
+        $testingData['step1Value']['job_id'] = $job->id;
+        $testingData['step1Value']['business_category_id'] = $afterChildBusinessCategory->id;
+        factory(Temporariness::class)->create(
+            [
+                'id' => sprintf(
+                    $idFormat,
+                    1,
+                    $job->id
+                ),
+                'value' => json_encode($testingData['step1Value']),
+                'user_id' => $testingData['client']->id
+            ]
+        );
+
+        // STEP2
+        $testingData['step2Value']['job_id'] = $job->id;
+        $testingData['step2Value']['job_tag_ids'] = [];
+        if ($afterParentCategory === 'writing') {
+            $testingData['step2Value'] += [
+                'article_count' => null,
+                'article_count_period' => null,
+                'assumed_readers' => '20代女性',
+                'character_count' => 500,
+                'end_of_sentence' => 1,
+                'teachme' => [
+                    '1週間に何記事書けるか',
+                    'これまでのライティングの経験',
+                ],
+                'recommend' => [
+                    '自分のペースで仕事したい方',
+                    'スキルアップしたい方',
+                ],
+                'prohibitions' => [
+                    '他のサイトからのコピーや転載',
+                    '公序良俗に違反するような表現',
+                ],
+                'pr_message' => '自分もショップを立ち上げたばかりの未熟者ですが、お客様に喜んでいただけるようなショップを一緒に作っていきましょう',
+                'theme' => 3,
+                'theme_other' => null
+            ];
+        }
+        $step2 = factory(Temporariness::class)->create(
+            [
+                'id' => sprintf(
+                    $idFormat,
+                    2,
+                    $job->id
+                ),
+                'value' => json_encode($testingData['step2Value']),
+                'user_id' => $testingData['client']->id
+            ]
+        );
+
+        // STEP3
+        $step3 = factory(Temporariness::class)->create(
+            [
+                'id' => sprintf(
+                    $idFormat,
+                    3,
+                    $job->id
+                ),
+                'value' => json_encode(['step_id' => 3, 'job_id' => $job->id]),
+                'user_id' => $testingData['client']->id
+            ]
+        );
+        $path = 'foo';
+        $name = "file_new.png";
+        factory(JobTemporarinessDoc::class)->create(
+            [
+                's3_path' => $path,
+                'filename' => $name,
+                'temporariness_id' => $step3->id
+            ]
+        );
+        $testingData['s3ClientMock']->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
+
+        // STEP4
+        $testingData['step4Value']['job_id'] = $job->id;
+        $testingData['step4Value']['business_skill_ids'] = $testingData['businessSkills']->pluck('id')->all();
+        factory(Temporariness::class)->create(
+            [
+                'id' => sprintf(
+                    $idFormat,
+                    4,
+                    $job->id
+                ),
+                'value' => json_encode($testingData['step4Value']),
+                'user_id' => $testingData['client']->id
+            ]
+        );
+
+        $this->setUrl($testingData['client'], $job->id);
+        $this->setAuthHeader($testingData['client']);
 
         // Act & Assert
         $response = $this->put($this->url, [], $this->headers);
         $response->assertStatus(200);
-        $response->assertJson(
-            [
-                'data' => [
-                    'attributes' => [
-                        'name' => $testingData['step2Value']['name'],
-                        'type' => $testingData['step1Value']['type'],
-                        'detail' => $testingData['step2Value']['detail'],
-                        'recruiting' => false,
-                        'activated' => false,
-                        're_edit' => false,
-                        'rejected' => false,
-                        'closed' => false,
-                        'limited_type_id' => Job::LIMIT_TYPE_PUBLIC,
-                        'wall_id' => null,
-                        'client_id' => $testingData['client']->id,
-                        'client_name' => $testingData['client']->username,
-                        'client_thumbnail' => $testingData['client']->thumbnail_url,
-                        's3_docs' => [],
-                        'job_tags' => [],
-                        'business_categories' => [
-                            [
-                                'id' => $testingData['businessCategoryParent']->id,
-                                'name' => $testingData['businessCategoryParent']->name,
-                                'link' => $testingData['businessCategoryParent']->parent_name,
-                                'child_categories' => [
-                                    [
-                                        'id' => $testingData['businessCategoryChild']->id,
-                                        'name' => $testingData['businessCategoryChild']->name,
-                                        'link' => $testingData['businessCategoryChild']->parent_name
-                                    ]
+        // assertDataの上書き
+        $testingData['assertJsonData'] = [
+            'data' => [
+                'attributes' => [
+                    'business_categories' => [
+                        [
+                            'id' => $afterParentBussinessCategory->id,
+                            'name' => $afterParentBussinessCategory->name,
+                            'link' => $afterParentBussinessCategory->parent_name,
+                            'child_categories' => [
+                                [
+                                    'id' => $afterChildBusinessCategory->id,
+                                    'name' => $afterChildBusinessCategory->name,
+                                    'link' => $afterChildBusinessCategory->parent_name
                                 ]
                             ]
-                        ],
-                        'business_skills' => [
-                            [
-                                'id' => $testingData['businessSkillGenre']->id,
-                                'name' => $testingData['businessSkillGenre']->name,
-                                'businessSkills' => [
-                                    [
-                                        'id' => $testingData['businessSkills'][0]->id,
-                                        'name' => $testingData['businessSkills'][0]->name,
-                                    ],
-                                    [
-                                        'id' => $testingData['businessSkills'][1]->id,
-                                        'name' => $testingData['businessSkills'][1]->name,
-                                    ]
-                                ]
-                            ]
-                        ],
-                        'prefectures' => [],
-                        'business_careers' => [],
-                        'unit_price' => $testingData['step2Value']['unit_price'],
-                        'recruitment_count' => '0/' . $testingData['step2Value']['quantity'],
-                        'task' => [
-                            'type' => 1, // 通常のタスク
-                            'sagooo_link' => null,
-                            'sagooo_published' => null,
-                            'sagooo_example' => null,
-                            'conditions' => [
-                                [
-                                    'item_name' => '質問数',
-                                    'txt_list' => '2問'
-                                ],
-                                [
-                                    'item_name' => 'うち必須回答',
-                                    'txt_list' => '1問'
-                                ],
-                                [
-                                    'item_name' => '回答条件',
-                                    'txt_list' => [
-                                        [
-                                            'txt' => '質問2',
-                                            'detail' => [
-                                                '10文字以上 1,000文字以下',
-                                                sprintf(
-                                                    '「%s」を%d回以上利用',
-                                                    $testingData['step2Value']['questions'][1]['keywords'][0]['keyword'],
-                                                    number_format($testingData['step2Value']['questions'][1]['keywords'][0]['repeat_count'])
-                                                ),
-                                                sprintf(
-                                                    '「%s」を%d回以上利用',
-                                                    $testingData['step2Value']['questions'][1]['keywords'][1]['keyword'],
-                                                    $testingData['step2Value']['questions'][1]['keywords'][1]['repeat_count']
-                                                )
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ],
-                        'unimedia_task' => []
+                        ]
                     ]
                 ]
             ]
-        );
+        ];
+        if ($afterParentCategory === 'writing') {
+            $testingData['assertJsonData'] = [
+                'data' => [
+                    'attributes' => [
+                        'details' => [
+                            'article_count' => 1000, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
+                            'article_count_period' => 1, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
+                            'assumed_readers' => '20代女性',
+                            'character_count' => 500,
+                            'end_of_sentence' => 1,
+                            'pr_message' => '自分もショップを立ち上げたばかりの未熟者ですが、お客様に喜んでいただけるようなショップを一緒に作っていきましょう',
+                            'prohibitions' => [
+                                '他のサイトからのコピーや転載',
+                                '公序良俗に違反するような表現',
+                            ],
+                            'recommend' => [
+                                '自分のペースで仕事したい方',
+                                'スキルアップしたい方',
+                            ],
+                            'teachme' => [
+                                '1週間に何記事書けるか',
+                                'これまでのライティングの経験',
+                            ],
+                            'theme' => 3,
+                            'theme_other' => null
+                        ]
+                    ]
+                ]
+            ];
+        }
+        $response->assertJson($testingData['assertJsonData']);
 
-        // trade_parametersが消えている
-        $this->assertDatabaseMissing(
-            'trade_parameters',
-            [
-                'id' => $testingData['defaultJobTypeTable']->id,
-                'job_id' => $job->id
-            ]
-        );
-
-        // tasksが作成されている
-        $this->assertDatabasehas(
-            'tasks',
-            [
-                'job_id' => $testingData['job']->id,
-                'unit_price' => $testingData['step2Value']['unit_price'],
-                'quantity' => $testingData['step2Value']['quantity']
-            ]
-        );
-
-        // jobsの仕事タイプが更新されている
+        // jobsが更新されている
         $this->assertDatabasehas(
             'jobs',
             [
-                'id' => $testingData['job']->id,
+                'id' => $job->id,
+                'business_category_id' => $afterChildBusinessCategory->id,
                 'type' => Job::TYPE_TASK
             ]
         );
@@ -1381,10 +1602,11 @@ class JobRegistrationsControllerTest extends TestCase
         $this->assertDatabaseMissing(
             'job_temporariness_docs',
             [
-                'temporariness_id' => $testingData['step2']->id,
+                'temporariness_id' => $step2->id,
                 'filename' => 'file_old.txt'
             ]
         );
+
         // s3_docs がある
         $this->assertDatabasehas(
             's3_docs',
@@ -1393,9 +1615,55 @@ class JobRegistrationsControllerTest extends TestCase
                 'filename' => 'file_new.png'
             ]
         );
-    }
 
-    // 仕事カテゴリーを変更した場合のテスト
+        if ($beforeParentCategory === 'writing') {
+            // job_detail_writing_items が削除されている
+            $this->assertDatabaseMissing(
+                'job_detail_writing_items',
+                [
+                    'job_id' => $job->id
+                ]
+            );
+        }
+
+        if ($beforeChildCategory === 'task_register') {
+            // job_detail_register_items が削除されている
+            $this->assertDatabaseMissing(
+                'job_detail_register_items',
+                [
+                    'job_id' => $job->id
+                ]
+            );
+        }
+
+        if ($afterParentCategory === 'writing') {
+            // job_detail_writing_items が作成されている
+            $this->assertDatabaseHas(
+                'job_detail_writing_items',
+                [
+                    'job_id' => $job->id,
+                    'article_count' => null,
+                    'article_count_period' => null
+                ]
+            );
+        }
+
+        if (($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register')
+            && ($afterParentCategory !== 'writing')
+        ) {
+            // 仕事カテゴリ変更前は「ライティング」もしくは「商品登録」で、変更後に左記以外が選択された場合
+            // jobsテーブルの該当カラムが更新されていること
+            $this->assertDatabasehas(
+                'jobs',
+                [
+                    'teachme' => null,
+                    'recommend' => null,
+                    'prohibitions' => null,
+                    'pr_message' => null,
+                ]
+            );
+        }
+    }
 
     public function testStore404()
     {
@@ -1471,41 +1739,19 @@ class JobRegistrationsControllerTest extends TestCase
         $this->post($this->url, [], $this->headers)->assertStatus(404);
     }
 
-    public function testProjectPut200()
+    /**
+     * プロジェクトの仕事を更新する際に共通化できるデータを作成
+     */
+    public function createProjectPut200Data()
     {
-        // Arrange
+        // ArrangeData
         $client = factory(User::class)->states('client')->create();
         $workers = factory(User::class, 3)->states('worker')->create();
 
-        // S3ClientのMock化
         $s3ClientMock = $this->getS3ClientMock();
         $s3ClientMock->shouldReceive('storeS3Object')->times(2)->andReturn(true);
         $s3ClientMock->shouldReceive('getS3ObjectUrlByPath')->times(2)->andReturn('http://hoge');
         $s3ClientMock->shouldReceive('deleteS3Object')->times(2)->andReturn(true);
-
-        // 仕事
-        $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create();
-        factory(JobRole::class)->create(
-            [
-                'user_id' => $client->id,
-                'job_id' => $job->id,
-                'role_id' => JobRole::OUTSOURCER
-            ]
-        );
-        $tradeParameter = factory(TradeParameter::class)->create(['job_id' => $job->id]);
-        // 修正前の仕事への添付
-        for ($fileIndex = 0; $fileIndex < 2; $fileIndex++) {
-            $path = 'hoge';
-            $name = "file_old{$fileIndex}.txt";
-            factory(S3Doc::class)->create(
-                [
-                    'model' => Job::S3_PATH_PROJECT,
-                    'foreign_key' => $tradeParameter->id,
-                    's3_path' => $path,
-                    'filename' => $name
-                ]
-            );
-        }
 
         // 一部をパートナーにする
         $partners = [];
@@ -1525,10 +1771,6 @@ class JobRegistrationsControllerTest extends TestCase
             ]
         );
 
-        $businessCategoryParent = factory(BusinessCategory::class)->create();
-        $businessCategoryChild = factory(BusinessCategory::class)->create(
-            ['parent_id' => $businessCategoryParent->id]
-        );
         $jobTags = factory(JobTag::class, 2)->create();
         $workableTime = factory(WorkableTime::class)->create();
         $environments = factory(Environment::class, 2)->create();
@@ -1549,13 +1791,187 @@ class JobRegistrationsControllerTest extends TestCase
         $businessCareers = [$businessCareer1, $businessCareer2];
         $ngWord = factory(NgWord::class, 2)->create();
 
-
         // 下書きデータ
+        $step1Value = $this->getStep1ProjectValue();
+
+        $step2Value = $this->getStep2ProjectValue();
+        $step2Value['workable_time_id'] = $workableTime->id;
+        $step2Value['job_tag_ids'] = $jobTags->pluck('id')->all();
+        $step2Value['period_type'] = Temporariness::PROJECT_PERIOD_TYPE_FIX_DATE;
+        $step2Value['period'] = Carbon::tomorrow('Asia/Tokyo')->format('Y-m-d');
+
+        $step4Value = $this->getStep4Value();
+        $step4Value['limited_type'] = Temporariness::JOB_LIMIT_TYPE_PARTNERS;
+        $step4Value['partner_ids'] = array_merge([$notCurrentPartner->id], collect($partners)->pluck('id')->all());
+        $step4Value['prefecture_ids'] = $prefectures->pluck('id')->all();
+        $step4Value['business_career_ids'] = collect($businessCareers)->pluck('id')->all();
+        $step4Value['business_skill_ids'] = $businessSkills->pluck('id')->all();
+        $step4Value['environment_ids'] = $environments->pluck('id')->all();
+
+        // AssertData
+        $assertJsonData = [
+            'data' => [
+                'attributes' => [
+                    'name' => $step2Value['name'],
+                    'type' => $step1Value['type'],
+                    'detail' => $step2Value['detail'],
+                    'recruiting' => false,
+                    'activated' => false,
+                    're_edit' => false,
+                    'rejected' => false,
+                    'closed' => false,
+                    'limited_type_id' => Job::LIMIT_TYPE_PARTNERS,
+                    'wall_id' => null,
+                    'client_id' => $client->id,
+                    'client_name' => $client->username,
+                    'client_thumbnail' => $client->thumbnail_url,
+                    // 's3_docs' => [] // 別でテストする
+                    'job_tags' => [
+                        [
+                            'id' => $jobTags[0]->id,
+                            'name' => $jobTags[0]->name,
+                            'link' => $jobTags[0]->search_name
+                        ],
+                        [
+                            'id' => $jobTags[1]->id,
+                            'name' => $jobTags[1]->name,
+                            'link' => $jobTags[1]->search_name
+                        ],
+                    ],
+                    'business_categories' => [ // 個々のテストで上書きをする
+                        [
+                            'id' => null,
+                            'name' => null,
+                            'link' => null,
+                            'child_categories' => [
+                                [
+                                    'id' => null,
+                                    'name' => null,
+                                    'link' => null
+                                ]
+                            ]
+                        ]
+                    ],
+                    'business_skills' => [
+                        [
+                            'id' => $businessSkillGenre->id,
+                            'name' => $businessSkillGenre->name,
+                            'businessSkills' => [
+                                [
+                                    'id' => $businessSkills[0]->id,
+                                    'name' => $businessSkills[0]->name,
+                                ],
+                                [
+                                    'id' => $businessSkills[1]->id,
+                                    'name' => $businessSkills[1]->name,
+                                ]
+                            ]
+                        ]
+                    ],
+                    'prefectures' => [
+                        [
+                            'id' => $prefectures[0]->id,
+                            'name' => $prefectures[0]->name,
+                            'area_id' => $prefectures[0]->area_id,
+                        ],
+                        [
+                            'id' => $prefectures[1]->id,
+                            'name' => $prefectures[1]->name,
+                            'area_id' => $prefectures[1]->area_id,
+                        ]
+                    ],
+                    'business_careers' => [
+                        [
+                            'id' => $businessCareerParent->id,
+                            'name' => $businessCareerParent->name,
+                            'child_careers' => [
+                                [
+                                    'id' => $businessCareers[0]->id,
+                                    'name' => $businessCareers[0]->name,
+                                ],
+                                [
+                                    'id' => $businessCareers[1]->id,
+                                    'name' => $businessCareers[1]->name,
+                                ]
+                            ]
+                        ]
+                    ],
+                    'unit_price' => $step2Value['unit_price_other'],
+                    'recruitment_count' => $step2Value['capacity_other'] . '名',
+                    'period' => 'あと1日',
+                    'scheduled_reward' => $step2Value['orders_per_worker_other'],
+                    'workable_time' => $workableTime->workable_time
+                ]
+            ]
+        ];
+
+        return compact(
+            'client',
+            's3ClientMock',
+            'step1Value',
+            'step2Value',
+            'step4Value',
+            'assertJsonData'
+        );
+    }
+
+    /**
+     * プロジェクトタイプの仕事を更新する場合のテスト
+     *
+     * @dataProvider providePut200
+     *
+     * @param bool $isChangeJobType
+     */
+    public function testProjectPut200(bool $isChangeJobType)
+    {
+        // Arrange
+        $testingData = $this->createProjectPut200Data();
+
+        // 仕事を作成
+        if ($isChangeJobType) { // STEP-1で仕事タイプを変更した場合
+            $job = factory(Job::class)->states('task', 'not_active', 're_edit')->create();
+            $defaultJobTypeTable = factory(Task::class)->create(
+                ['job_id' => $job->id]
+            );
+            $s3DocModel = Job::S3_PATH_TASK;
+        } else { // STEP-1で仕事タイプを変更しなかった場合
+            $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create();
+            $defaultJobTypeTable = factory(TradeParameter::class)->create([
+                'job_id' => $job->id
+            ]);
+            $s3DocModel = Job::S3_PATH_PROJECT;
+        }
+        factory(JobRole::class)->create(
+            [
+                'user_id' => $testingData['client']->id,
+                'job_id' => $job->id,
+                'role_id' => JobRole::OUTSOURCER
+            ]
+        );
+
+        // 修正前の仕事へのファイルの添付
+        for ($fileIndex = 0; $fileIndex < 2; $fileIndex++) {
+            $path = 'hoge';
+            $name = "file_old{$fileIndex}.txt";
+            factory(S3Doc::class)->create(
+                [
+                    'model' => $s3DocModel,
+                    'foreign_key' => $defaultJobTypeTable->id,
+                    's3_path' => $path,
+                    'filename' => $name
+                ]
+            );
+        }
+
+        // 仕事カテゴリーのデータを作成
+        $businessCategoryParent = factory(BusinessCategory::class)->states('task')->create();
+        $businessCategoryChild = factory(BusinessCategory::class)->states('task_entry')->create();
+
+        // 下書きデータを作成
         $idFormat = Temporariness::JOB_REEDIT_ID_FORMAT;
         // STEP1
-        $step1Value = $this->getStep1ProjectValue();
-        $step1Value['job_id'] = $job->id;
-        $step1Value['business_category_id'] = $businessCategoryChild->id;
+        $testingData['step1Value']['job_id'] = $job->id;
+        $testingData['step1Value']['business_category_id'] = $businessCategoryChild->id;
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1563,17 +1979,13 @@ class JobRegistrationsControllerTest extends TestCase
                     1,
                     $job->id
                 ),
-                'value' => json_encode($step1Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step1Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
+
         // STEP2
-        $step2Value = $this->getStep2ProjectValue();
-        $step2Value['job_id'] = $job->id;
-        $step2Value['workable_time_id'] = $workableTime->id;
-        $step2Value['job_tag_ids'] = $jobTags->pluck('id')->all();
-        $step2Value['period_type'] = Temporariness::PROJECT_PERIOD_TYPE_FIX_DATE;
-        $step2Value['period'] = Carbon::tomorrow('Asia/Tokyo')->format('Y-m-d');
+        $testingData['step2Value']['job_id'] = $job->id;
         $step2 = factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1581,8 +1993,8 @@ class JobRegistrationsControllerTest extends TestCase
                     2,
                     $job->id
                 ),
-                'value' => json_encode($step2Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step2Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
 
@@ -1595,7 +2007,7 @@ class JobRegistrationsControllerTest extends TestCase
                     $job->id
                 ),
                 'value' => json_encode(['step_id' => 3]),
-                'user_id' => $client->id
+                'user_id' => $testingData['client']->id
             ]
         );
         // 添付
@@ -1610,18 +2022,11 @@ class JobRegistrationsControllerTest extends TestCase
                     'filename' => $name
                 ]
             );
-            $s3ClientMock->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
+            $testingData['s3ClientMock']->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
         }
 
         // STEP4
-        $step4Value = $this->getStep4Value();
-        $step4Value['job_id'] = $job->id;
-        $step4Value['limited_type'] = Temporariness::JOB_LIMIT_TYPE_PARTNERS;
-        $step4Value['partner_ids'] = array_merge([$notCurrentPartner->id], collect($partners)->pluck('id')->all());
-        $step4Value['prefecture_ids'] = $prefectures->pluck('id')->all();
-        $step4Value['business_career_ids'] = collect($businessCareers)->pluck('id')->all();
-        $step4Value['business_skill_ids'] = $businessSkills->pluck('id')->all();
-        $step4Value['environment_ids'] = $environments->pluck('id')->all();
+        $testingData['step4Value']['job_id'] = $job->id;
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1629,115 +2034,39 @@ class JobRegistrationsControllerTest extends TestCase
                     4,
                     $job->id
                 ),
-                'value' => json_encode($step4Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step4Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
 
-        $this->setUrl($client, $job->id);
-        $this->setAuthHeader($client);
+        $this->setUrl($testingData['client'], $job->id);
+        $this->setAuthHeader($testingData['client']);
 
         // Act & Assert
         $response = $this->put($this->url, [], $this->headers);
         $response->assertStatus(200);
 
-        $response->assertJson(
-            [
-                'data' => [
-                    'attributes' => [
-                        'name' => $step2Value['name'],
-                        'type' => $step1Value['type'],
-                        'detail' => $step2Value['detail'],
-                        'recruiting' => false,
-                        'activated' => false,
-                        're_edit' => false,
-                        'rejected' => false,
-                        'closed' => false,
-                        'limited_type_id' => Job::LIMIT_TYPE_PARTNERS,
-                        'wall_id' => null,
-                        'client_id' => $client->id,
-                        'client_name' => $client->username,
-                        'client_thumbnail' => $client->thumbnail_url,
-                        // 's3_docs' => [] // 別でテストする
-                        'job_tags' => [
-                            [
-                                'id' => $jobTags[0]->id,
-                                'name' => $jobTags[0]->name,
-                                'link' => $jobTags[0]->search_name
-                            ],
-                            [
-                                'id' => $jobTags[1]->id,
-                                'name' => $jobTags[1]->name,
-                                'link' => $jobTags[1]->search_name
-                            ],
-                        ],
-                        'business_categories' => [
-                            [
-                                'id' => $businessCategoryParent->id,
-                                'name' => $businessCategoryParent->name,
-                                'link' => $businessCategoryParent->parent_name,
-                                'child_categories' => [
-                                    [
-                                        'id' => $businessCategoryChild->id,
-                                        'name' => $businessCategoryChild->name,
-                                        'link' => $businessCategoryChild->parent_name
-                                    ]
+        $testingData['assertJsonData'] = [
+            'data' => [
+                'attributes' => [
+                    'business_categories' => [
+                        [
+                            'id' => $businessCategoryParent->id,
+                            'name' => $businessCategoryParent->name,
+                            'link' => $businessCategoryParent->parent_name,
+                            'child_categories' => [
+                                [
+                                    'id' => $businessCategoryChild->id,
+                                    'name' => $businessCategoryChild->name,
+                                    'link' => $businessCategoryChild->parent_name
                                 ]
                             ]
-                        ],
-                        'business_skills' => [
-                            [
-                                'id' => $businessSkillGenre->id,
-                                'name' => $businessSkillGenre->name,
-                                'businessSkills' => [
-                                    [
-                                        'id' => $businessSkills[0]->id,
-                                        'name' => $businessSkills[0]->name,
-                                    ],
-                                    [
-                                        'id' => $businessSkills[1]->id,
-                                        'name' => $businessSkills[1]->name,
-                                    ]
-                                ]
-                            ]
-                        ],
-                        'prefectures' => [
-                            [
-                                'id' => $prefectures[0]->id,
-                                'name' => $prefectures[0]->name,
-                                'area_id' => $prefectures[0]->area_id,
-                            ],
-                            [
-                                'id' => $prefectures[1]->id,
-                                'name' => $prefectures[1]->name,
-                                'area_id' => $prefectures[1]->area_id,
-                            ]
-                        ],
-                        'business_careers' => [
-                            [
-                                'id' => $businessCareerParent->id,
-                                'name' => $businessCareerParent->name,
-                                'child_careers' => [
-                                    [
-                                        'id' => $businessCareers[0]->id,
-                                        'name' => $businessCareers[0]->name,
-                                    ],
-                                    [
-                                        'id' => $businessCareers[1]->id,
-                                        'name' => $businessCareers[1]->name,
-                                    ]
-                                ]
-                            ]
-                        ],
-                        'unit_price' => $step2Value['unit_price_other'],
-                        'recruitment_count' => $step2Value['capacity_other'] . '名',
-                        'period' => 'あと1日',
-                        'scheduled_reward' => $step2Value['orders_per_worker_other'],
-                        'workable_time' => $workableTime->workable_time
+                        ]
                     ]
                 ]
             ]
-        );
+        ];
+        $response->assertJson($testingData['assertJsonData']);
 
         // 編集前の添付ファイルが削除されている
         for ($fileIndex = 0; $fileIndex < 2; $fileIndex++) {
@@ -1770,81 +2099,173 @@ class JobRegistrationsControllerTest extends TestCase
                 ]
             );
         }
+
+        // STEP-1で仕事タイプを変更した場合
+        if ($isChangeJobType) {
+            // tasksが消えている
+            $this->assertDatabaseMissing(
+                'tasks',
+                [
+                    'id' => $defaultJobTypeTable->id,
+                    'job_id' => $job->id
+                ]
+            );
+
+            // trade_parametersが作成されている
+            $this->assertDatabasehas(
+                'trade_parameters',
+                [
+                    'job_id' => $job->id,
+                    'unit_price' => $testingData['step2Value']['unit_price_other'],
+                ]
+            );
+
+            // jobsの仕事タイプが更新されている
+            $this->assertDatabasehas(
+                'jobs',
+                [
+                    'id' => $job->id,
+                    'type' => Job::TYPE_PROJECT
+                ]
+            );
+        }
     }
 
-    // 差し戻し編集時、仕事タイプをタスクからプロジェクトに変更した場合
-    public function testPut200TaskToProject()
+    // 仕事カテゴリーを変更した場合のテスト
+    public function providePut200ChangeCategoryProject()
+    {
+        return
+        [
+            '「ライティング」→「事務作業」（その他のカテゴリー）に変更した場合' => [
+                'writing',
+                'writing_blog',
+                'task',
+                'task_entry'
+            ],
+            '「商品登録」→「事務作業」（その他のカテゴリー）に変更した場合' => [
+                'task',
+                'task_register',
+                'task',
+                'task_entry'
+            ],
+            '「事務作業」（その他のカテゴリー）→「ライティング」に変更した場合' => [
+                'task',
+                'task_entry',
+                'writing',
+                'writing_blog'
+            ],
+            '「事務作業」（その他のカテゴリー）→「商品登録」に変更した場合' => [
+                'task',
+                'task_entry',
+                'task',
+                'task_register'
+            ],
+            '「商品登録」→「ライティング」に変更した場合' => [
+                'task',
+                'task_register',
+                'writing',
+                'writing_blog'
+            ],
+            '「ライティング」→「商品登録」に変更した場合' => [
+                'writing',
+                'writing_blog',
+                'task',
+                'task_register'
+            ]
+        ];
+    }
+
+    /**
+     * 仕事カテゴリーを変更した場合のテスト
+     * 「商品登録」はプロジェクトでしか選択できないので、仕事タイプについては変更前・変更後共に「プロジェクト」としている。
+     *
+     * @dataProvider providePut200ChangeCategoryProject
+     *
+     * @param string $beforeParentCategory
+     * @param string $beforeChildCategory
+     * @param string $afterParentCategory
+     * @param string $afterChildCategory
+     */
+    public function testPut200ChangeCategoryProject()
     {
         // Arrange
-        $client = factory(User::class)->states('client')->create();
-        $workers = factory(User::class, 3)->states('worker')->create();
+        $testingData = $this->createProjectPut200Data();
 
-        // S3ClientのMock化
-        $s3ClientMock = $this->getS3ClientMock();
-        $s3ClientMock->shouldReceive('storeS3Object')->times(2)->andReturn(true);
-        $s3ClientMock->shouldReceive('getS3ObjectUrlByPath')->times(2)->andReturn('http://hoge');
-        $s3ClientMock->shouldReceive('deleteS3Object')->times(2)->andReturn(true);
+        // 変更前の仕事カテゴリー
+        $beforeChildBusinessCategory = factory(BusinessCategory::class)->states($beforeChildCategory)->create();
 
-        $job = factory(Job::class)->states('task', 'not_active', 're_edit')->create();
+        // 仕事を作成
+        if ($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register') {
+            $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
+                'business_category_id' => $beforeChildBusinessCategory->id,
+                'prohibitions' => [
+                    '禁止事項1',
+                    '禁止事項2'
+                ],
+                'recommend' => [
+                    'オススメ1',
+                    'オススメ2'
+                ],
+                'teachme' => [
+                    '教えて欲しいこと1',
+                    '教えて欲しいこと2'
+                ],
+                'pr_message' => [
+                    'PRメッセージ'
+                ]
+            ]);
+        } else {
+            $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
+                'business_category_id' => $beforeChildBusinessCategory->id
+            ]);
+        }
+        $defaultJobTypeTable = factory(TradeParameter::class)->create([
+            'job_id' => $job->id
+        ]);
         factory(JobRole::class)->create(
             [
-                'user_id' => $client->id,
+                'user_id' => $testingData['client']->id,
                 'job_id' => $job->id,
                 'role_id' => JobRole::OUTSOURCER
             ]
         );
-        $task = factory(Task::class)->create(
-            ['job_id' => $job->id]
-        );
-        
-        // 修正前の仕事への添付
+
+        // 変更前の仕事カテゴリーがライティングに属する場合は、job_detail_writing_itemsを作成する
+        if ($beforeParentCategory === 'writing') {
+            factory(JobDetailWritingItem::class)->create([
+                'job_id' => $job->id
+            ]);
+        }
+        // 変更前の仕事カテゴリーが商品登録の場合は、job_detail_register_itemsを作成する
+        if ($beforeChildCategory === 'task_register') {
+            factory(JobDetailRegisterItem::class)->create([
+                'job_id' => $job->id
+            ]);
+        }
+
+        // 修正前の仕事へのファイルの添付
         for ($fileIndex = 0; $fileIndex < 2; $fileIndex++) {
             $path = 'hoge';
             $name = "file_old{$fileIndex}.txt";
             factory(S3Doc::class)->create(
                 [
-                    'model' => Job::S3_PATH_TASK,
-                    'foreign_key' => $task->id,
+                    'model' => Job::S3_PATH_PROJECT,
+                    'foreign_key' => $defaultJobTypeTable->id,
                     's3_path' => $path,
                     'filename' => $name
                 ]
             );
         }
 
-        // 一部をパートナーにする
-        $partners = [];
-        for ($index = 0; $index < 2; $index++) {
-            $partners[] = factory(Partner::class)->create(
-                [
-                    'outsourcer_id' => $client->id,
-                    'contractor_id' => $workers[$index]->id,
-                ]
-            );
-        }
-        $notCurrentPartner = factory(Partner::class)->create(
-            [
-                'outsourcer_id' => $client->id,
-                'contractor_id' => $workers[2]->id,
-                'state' => Partner::STATE_DISSOLVED_BY_CONTRACTOR
-            ]
-        );
+        // 変更後の仕事カテゴリー
+        $afterParentBussinessCategory = factory(BusinessCategory::class)->states($afterParentCategory)->create();
+        $afterChildBusinessCategory = factory(BusinessCategory::class)->states($afterChildCategory)->create();
 
-        $businessCategoryParent = factory(BusinessCategory::class)->create();
-        $businessCategoryChild = factory(BusinessCategory::class)->create(
-            ['parent_id' => $businessCategoryParent->id]
-        );
-        $businessSkillGenre = factory(BusinessSkillGenre::class)->create();
-        $businessSkills = factory(BusinessSkill::class, 2)->create([
-            'business_skill_genre_id' => $businessSkillGenre->id
-        ]);
-
-        // 下書きデータ
+        // 下書きデータを作成
         $idFormat = Temporariness::JOB_REEDIT_ID_FORMAT;
         // STEP1
-        $step1Value = $this->getStep1ProjectValue();
-        $step1Value['job_id'] = $job->id;
-        $step1Value['type'] = Job::TYPE_PROJECT;
-        $step1Value['business_category_id'] = $businessCategoryChild->id;
+        $testingData['step1Value']['job_id'] = $job->id;
+        $testingData['step1Value']['business_category_id'] = $afterChildBusinessCategory->id;
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1852,18 +2273,52 @@ class JobRegistrationsControllerTest extends TestCase
                     1,
                     $job->id
                 ),
-                'value' => json_encode($step1Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step1Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
 
         // STEP2
-        $step2Value = $this->getStep2ProjectValue();
-        $step2Value['job_id'] = $job->id;
-        $step2Value['workable_time_id'] = $workableTime->id;
-        $step2Value['job_tag_ids'] = $jobTags->pluck('id')->all();
-        $step2Value['period_type'] = Temporariness::PROJECT_PERIOD_TYPE_FIX_DATE;
-        $step2Value['period'] = Carbon::tomorrow('Asia/Tokyo')->format('Y-m-d');
+        $testingData['step2Value']['job_id'] = $job->id;
+        if ($afterParentCategory === 'writing' || $afterChildCategory === 'task_register') {
+            $testingData['step2Value'] += [
+                'teachme' => [
+                    '教えて欲しいこと1',
+                    '教えて欲しいこと2',
+                ],
+                'recommend' => [
+                    'オススメ1',
+                    'オススメ2',
+                ],
+                'prohibitions' => [
+                    '禁止事項1',
+                    '禁止事項2',
+                ],
+                'pr_message' => 'PRメッセージ',
+            ];
+        }
+        if ($afterParentCategory === 'writing') {
+            $testingData['step2Value'] += [
+                'article_count' => 15,
+                'article_count_period' => 3,
+                'assumed_readers' => '20代女性',
+                'character_count' => 500,
+                'end_of_sentence' => 1,
+                'theme' => 3,
+                'theme_other' => null
+            ];
+        }
+        if ($afterChildCategory === 'task_register') {
+            $testingData['step2Value'] += [
+                'has_trial' => 1,
+                'trial' => 'トライアル',
+                'has_image_creation' => 1,
+                'image_creation' => '素材の提供有無: 有り',
+                'has_description_creation' => 1,
+                'description_creation' => 'リサーチした海外サイトの商品説明を全角100文字以内でリライトしていただきます。',
+                'manual' => '今回行なっていただく作業を一通り網羅した動画マニュアルを用意しています。'
+            ];
+        }
         $step2 = factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1871,8 +2326,8 @@ class JobRegistrationsControllerTest extends TestCase
                     2,
                     $job->id
                 ),
-                'value' => json_encode($step2Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step2Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
 
@@ -1885,7 +2340,7 @@ class JobRegistrationsControllerTest extends TestCase
                     $job->id
                 ),
                 'value' => json_encode(['step_id' => 3]),
-                'user_id' => $client->id
+                'user_id' => $testingData['client']->id
             ]
         );
         // 添付
@@ -1900,18 +2355,11 @@ class JobRegistrationsControllerTest extends TestCase
                     'filename' => $name
                 ]
             );
-            $s3ClientMock->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
+            $testingData['s3ClientMock']->storeS3Object($path, $name, UploadedFile::fake()->create($name), false);
         }
 
         // STEP4
-        $step4Value = $this->getStep4Value();
-        $step4Value['job_id'] = $job->id;
-        $step4Value['limited_type'] = Temporariness::JOB_LIMIT_TYPE_PARTNERS;
-        $step4Value['partner_ids'] = array_merge([$notCurrentPartner->id], collect($partners)->pluck('id')->all());
-        $step4Value['prefecture_ids'] = $prefectures->pluck('id')->all();
-        $step4Value['business_career_ids'] = collect($businessCareers)->pluck('id')->all();
-        $step4Value['business_skill_ids'] = $businessSkills->pluck('id')->all();
-        $step4Value['environment_ids'] = $environments->pluck('id')->all();
+        $testingData['step4Value']['job_id'] = $job->id;
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1919,17 +2367,203 @@ class JobRegistrationsControllerTest extends TestCase
                     4,
                     $job->id
                 ),
-                'value' => json_encode($step4Value),
-                'user_id' => $client->id
+                'value' => json_encode($testingData['step4Value']),
+                'user_id' => $testingData['client']->id
             ]
         );
 
-        $this->setUrl($client, $job->id);
-        $this->setAuthHeader($client);
+        $this->setUrl($testingData['client'], $job->id);
+        $this->setAuthHeader($testingData['client']);
 
-        // Act
+        // Act & Assert
+        $response = $this->put($this->url, [], $this->headers);
+        $response->assertStatus(200);
 
-        // Assert
+        // assertDataの上書き
+        $testingData['assertJsonData'] = [
+            'data' => [
+                'attributes' => [
+                    'business_categories' => [
+                        [
+                            'id' => $afterParentBussinessCategory->id,
+                            'name' => $afterParentBussinessCategory->name,
+                            'link' => $afterParentBussinessCategory->parent_name,
+                            'child_categories' => [
+                                [
+                                    'id' => $afterChildBusinessCategory->id,
+                                    'name' => $afterChildBusinessCategory->name,
+                                    'link' => $afterChildBusinessCategory->parent_name
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ];
+        if ($afterParentCategory === 'writing' || $afterChildCategory === 'task_register') {
+            $testingData['assertJsonData'] = [
+                'data' => [
+                    'attributes' => [
+                        'details' => [
+                            'prohibitions' => [
+                                '禁止事項1',
+                                '禁止事項2'
+                            ],
+                            'recommend' => [
+                                'オススメ1',
+                                'オススメ2'
+                            ],
+                            'teachme' => [
+                                '教えて欲しいこと1',
+                                '教えて欲しいこと2'
+                            ],
+                            'pr_message' => [
+                                'PRメッセージ'
+                            ]
+                        ]
+                    ]
+                ]
+            ];
+        }
+        if ($afterParentCategory === 'writing') {
+            $testingData['assertJsonData'] = [
+                'data' => [
+                    'attributes' => [
+                        'details' => [
+                            'article_count' => 15,
+                            'article_count_period' => 3,
+                            'assumed_readers' => '20代女性',
+                            'character_count' => 500,
+                            'end_of_sentence' => 1,
+                            'theme' => 3,
+                            'theme_other' => null
+                        ]
+                    ]
+                ]
+            ];
+        }
+        if ($afterChildCategory === 'task_register') {
+            $testingData['assertJsonData'] = [
+                'data' => [
+                    'attributes' => [
+                        'details' => [
+                            'has_trial' => 1,
+                            'trial' => 'トライアル',
+                            'has_image_creation' => 1,
+                            'image_creation' => '素材の提供有無: 有り',
+                            'has_description_creation' => 1,
+                            'description_creation' => 'リサーチした海外サイトの商品説明を全角100文字以内でリライトしていただきます。',
+                            'manual' => '今回行なっていただく作業を一通り網羅した動画マニュアルを用意しています。'
+                        ]
+                    ]
+                ]
+            ];
+        }
+        $response->assertJson($testingData['assertJsonData']);
+
+        // TODO: それぞれのレコードが削除・追加された処理を書く
+        // TODO: jobsのレコードのカテゴリが更新されていることをテスト
+
+        // 編集前の添付ファイルが削除されている
+        for ($fileIndex = 0; $fileIndex < 2; $fileIndex++) {
+            $name = "file_old{$fileIndex}.txt";
+            $this->assertDatabaseMissing(
+                's3_docs',
+                [
+                    'model' => Job::S3_PATH_TASK,
+                    'foreign_key' => $defaultJobTypeTable->id,
+                    'filename' => $name
+                ]
+            );
+        }
+
+        // 添付
+        foreach ($jobTemporarinessDocs as $doc) {
+            // job_temporariness_docs が消えている
+            $this->assertDatabaseMissing(
+                'job_temporariness_docs',
+                [
+                    'temporariness_id' => $step2->id,
+                    'filename' => $doc->filename
+                ]
+            );
+            // s3_docs がある
+            $this->assertDatabasehas(
+                's3_docs',
+                [
+                    'model' => Job::S3_PATH_PROJECT,
+                    'filename' => $doc->filename
+                ]
+            );
+        }
+
+        if ($beforeParentCategory === 'writing') {
+            // job_detail_writing_items が削除されている
+            $this->assertDatabaseMissing(
+                'job_detail_writing_items',
+                [
+                    'job_id' => $job->id
+                ]
+            );
+        }
+
+        if ($beforeChildCategory === 'task_register') {
+            // job_detail_register_items が削除されている
+            $this->assertDatabaseMissing(
+                'job_detail_register_items',
+                [
+                    'job_id' => $job->id
+                ]
+            );
+        }
+
+        if ($afterParentCategory === 'writing') {
+            // job_detail_writing_items が作成されている
+            $this->assertDatabaseHas(
+                'job_detail_writing_items',
+                [
+                    'job_id' => $job->id
+                ]
+            );
+        }
+
+        if ($afterChildCategory === 'task_register') {
+            $this->assertDatabaseHas(
+                'job_detail_register_items',
+                [
+                    'job_id' => $job->id
+                ]
+            );
+        }
+
+        if (($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register')
+            && (! ($afterParentCategory === 'writing' || $afterChildCategory === 'task_register'))
+        ) {
+            // 仕事カテゴリ変更前は「ライティング」もしくは「商品登録」で、変更後に左記以外が選択された場合
+            // jobsテーブルの該当カラムがnullに更新されていること
+            $this->assertDatabasehas(
+                'jobs',
+                [
+                    'teachme' => null,
+                    'recommend' => null,
+                    'prohibitions' => null,
+                    'pr_message' => null,
+                ]
+            );
+        }
+
+        if (! ($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register')
+            && ($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register')
+        ) {
+            // 仕事カテゴリ変更前は「ライティング」もしくは「商品登録」以外で、変更後に左記が選択された場合
+            // trade_parametersの該当カラムがnullに更新されていること
+            $this->assertDatabasehas(
+                'trade_parameters',
+                [
+                    'workable_time_id' => null
+                ]
+            );
+        }
     }
 
     public function testApprovedMailProject()
