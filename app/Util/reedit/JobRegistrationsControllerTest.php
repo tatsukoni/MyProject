@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Mail;
 use Tests\Feature\Controllers\V1\Internal\JobTemporariness;
 use App\Domain\JobTemporariness\JobDetail\JobDetailService;
 use App\Http\Controllers\Components\TradeState;
+use OwenIt\Auditing\Models\Audit;
 use App\Models\BusinessCategory;
 use App\Models\BusinessCareer;
 use App\Models\BusinessSkill;
@@ -19,11 +20,11 @@ use App\Models\BusinessSkillGenre;
 use App\Models\DeferringFee;
 use App\Models\Environment;
 use App\Models\Job;
+use App\Models\JobDetailRegisterItem;
+use App\Models\JobDetailWritingItem;
 use App\Models\JobTag;
 use App\Models\JobRole;
-use App\Models\JobDetailRegisterItem;
 use App\Models\JobTemporarinessDoc;
-use App\Models\JobDetailWritingItem;
 use App\Models\NgWord;
 use App\Models\OutsourcerRank;
 use App\Models\Partner;
@@ -34,6 +35,8 @@ use App\Models\Task;
 use App\Models\Temporariness;
 use App\Models\TradeParameter;
 use App\Models\User;
+use App\Models\Wall;
+use App\Models\WallTrack;
 use App\Models\WorkableTime;
 use App\Jobs\Job\Approved;
 use App\Jobs\Job\InvitedAsPartner;
@@ -950,10 +953,8 @@ class JobRegistrationsControllerTest extends TestCase
         Mail::assertNotQueued(\App\Mail\Mails\Deposit\CaughtDeposit::class);
     }
 
-    // start
     /**
      * タスクの仕事を更新する際に共通化できるデータを作成
-     *
      */
     public function createTaskPut200Data()
     {
@@ -973,8 +974,12 @@ class JobRegistrationsControllerTest extends TestCase
 
         // 下書きデータ
         $step1Value = $this->getStep1TaskValue();
+
         $step2Value = $this->getStep2TaskValue();
+        $step2Value['job_tag_ids'] = [];
+
         $step4Value = $this->getStep4Value();
+        $step4Value['business_skill_ids'] = $businessSkills->pluck('id')->all();
 
         // AssertData
         $assertJsonData = [
@@ -995,31 +1000,18 @@ class JobRegistrationsControllerTest extends TestCase
                     'client_thumbnail' => $client->thumbnail_url,
                     's3_docs' => [],
                     'job_tags' => [],
-                    'business_categories' => [ // 個別のテストで上書きされる
-                        [
-                            'id' => null,
-                            'name' => null,
-                            'link' => null,
-                            'child_categories' => [
-                                [
-                                    'id' => null,
-                                    'name' => null,
-                                    'link' => null
-                                ]
-                            ]
-                        ]
-                    ],
+                    // 'business_categories' => [] 個々のテストで上書きされる
                     'business_skills' => [
                         [
-                            'id' => $businessSkillGenre->id,
+                            'id' => (string)$businessSkillGenre->id,
                             'name' => $businessSkillGenre->name,
                             'businessSkills' => [
                                 [
-                                    'id' => $businessSkills[0]->id,
+                                    'id' => (string)$businessSkills[0]->id,
                                     'name' => $businessSkills[0]->name,
                                 ],
                                 [
-                                    'id' => $businessSkills[1]->id,
+                                    'id' => (string)$businessSkills[1]->id,
                                     'name' => $businessSkills[1]->name,
                                 ]
                             ]
@@ -1027,12 +1019,12 @@ class JobRegistrationsControllerTest extends TestCase
                     ],
                     'prefectures' => [],
                     'business_careers' => [],
-                    'unit_price' => $step2Value['unit_price'],
+                    'unit_price' => (string)$step2Value['unit_price'],
                     'recruitment_count' => '0/' . $step2Value['quantity'],
                     'task' => [
                         'type' => 1, // 通常のタスク
                         'sagooo_link' => null,
-                        'sagooo_published' => null,
+                        'sagooo_published' => false,
                         'sagooo_example' => null,
                         'conditions' => [
                             [
@@ -1076,7 +1068,8 @@ class JobRegistrationsControllerTest extends TestCase
             's3ClientMock',
             'step1Value',
             'step2Value',
-            'step4Value'
+            'step4Value',
+            'assertJsonData'
         );
     }
 
@@ -1095,6 +1088,8 @@ class JobRegistrationsControllerTest extends TestCase
 
     /**
      * タスクタイプの仕事を更新する場合のテスト
+     * 1：仕事タイプを変更しない（タスク → タスク）での更新
+     * 2：仕事タイプを変更した（プロジェクト → タスク）での更新
      *
      * @dataProvider providePut200
      *
@@ -1112,6 +1107,10 @@ class JobRegistrationsControllerTest extends TestCase
                 ['job_id' => $job->id]
             );
             $s3DocModel = Job::S3_PATH_PROJECT;
+            // 仕事タイプ変更時に、変更前のauditsが削除されていることを確認するため
+            $audits = factory(Audit::class)->states('trade_parameter')->create([
+                'auditable_id' => $defaultJobTypeTable->id
+            ]);
         } else { // STEP-1で仕事タイプを変更しなかった場合
             $job = factory(Job::class)->states('task', 'not_active', 're_edit')->create();
             $defaultJobTypeTable = factory(Task::class)->create(
@@ -1163,7 +1162,6 @@ class JobRegistrationsControllerTest extends TestCase
 
         // STEP2
         $testingData['step2Value']['job_id'] = $job->id;
-        $testingData['step2Value']['job_tag_ids'] = [];
         $step2 = factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1201,7 +1199,6 @@ class JobRegistrationsControllerTest extends TestCase
 
         // STEP4
         $testingData['step4Value']['job_id'] = $job->id;
-        $testingData['step4Value']['business_skill_ids'] = $testingData['businessSkills']->pluck('id')->all();
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1221,22 +1218,16 @@ class JobRegistrationsControllerTest extends TestCase
         $response = $this->put($this->url, [], $this->headers);
         $response->assertStatus(200);
         // assertDataの上書き
-        $testingData['assertJsonData'] = [
-            'data' => [
-                'attributes' => [
-                    'business_categories' => [
-                        [
-                            'id' => $businessCategoryParent->id,
-                            'name' => $businessCategoryParent->name,
-                            'link' => $businessCategoryParent->parent_name,
-                            'child_categories' => [
-                                [
-                                    'id' => $businessCategoryChild->id,
-                                    'name' => $businessCategoryChild->name,
-                                    'link' => $businessCategoryChild->parent_name
-                                ]
-                            ]
-                        ]
+        $testingData['assertJsonData']['data']['attributes']['business_categories'] = [
+            [
+                'id' => $businessCategoryParent->id,
+                'name' => $businessCategoryParent->name,
+                'link' => $businessCategoryParent->parent_name,
+                'child_categories' => [
+                    [
+                        'id' => $businessCategoryChild->id,
+                        'name' => $businessCategoryChild->name,
+                        'link' => $businessCategoryChild->parent_name
                     ]
                 ]
             ]
@@ -1298,6 +1289,31 @@ class JobRegistrationsControllerTest extends TestCase
                 [
                     'id' => $job->id,
                     'type' => Job::TYPE_TASK
+                ]
+            );
+
+            // タスク wall が作成されている
+            $this->assertDatabasehas(
+                'walls',
+                [
+                    'job_id' => $job->id,
+                    'owner_id' => $testingData['client']->id,
+                    'wall_type_id' => Wall::TYPE_TASK_OUTSOURCER
+                ]
+            );
+            $this->assertDatabasehas(
+                'wall_tracks',
+                [
+                    'user_id' => $testingData['client']->id
+                ]
+            );
+
+            // TradeParameter のAuditsが消えている
+            $this->assertDatabaseMissing(
+                'audits',
+                [
+                    'auditable_type' => $audits->auditable_type,
+                    'auditable_id' => $audits->auditable_id
                 ]
             );
         }
@@ -1363,21 +1379,21 @@ class JobRegistrationsControllerTest extends TestCase
         if ($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register') {
             $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
                 'business_category_id' => $beforeChildBusinessCategory->id,
-                'prohibitions' => [
+                'prohibitions' => "[
                     '禁止事項1',
                     '禁止事項2'
-                ],
-                'recommend' => [
+                ]",
+                'recommend' => "[
                     'オススメ1',
                     'オススメ2'
-                ],
-                'teachme' => [
+                ]",
+                'teachme' => "[
                     '教えて欲しいこと1',
                     '教えて欲しいこと2'
-                ],
-                'pr_message' => [
+                ]",
+                'pr_message' => "[
                     'PRメッセージ'
-                ]
+                ]"
             ]);
         } else {
             $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
@@ -1395,16 +1411,22 @@ class JobRegistrationsControllerTest extends TestCase
             ]
         );
 
-        // 変更前の仕事カテゴリーがライティングに属する場合は、job_detail_writing_itemsを作成する
+        // 変更前の仕事カテゴリーがライティングに属する場合
         if ($beforeParentCategory === 'writing') {
-            factory(JobDetailWritingItem::class)->create([
+            $jobDetailWritingItem = factory(JobDetailWritingItem::class)->create([
                 'job_id' => $job->id
             ]);
+            $audits = factory(Audit::class)->states('jobWriting')->create([
+                'auditable_id' => $jobDetailWritingItem->id
+            ]);
         }
-        // 変更前の仕事カテゴリーが商品登録の場合は、job_detail_register_itemsを作成する
+        // 変更前の仕事カテゴリーが商品登録の場合
         if ($beforeChildCategory === 'task_register') {
-            factory(JobDetailRegisterItem::class)->create([
+            $jobDetailRegisterItem = factory(JobDetailRegisterItem::class)->create([
                 'job_id' => $job->id
+            ]);
+            $audits = factory(Audit::class)->states('jobRegister')->create([
+                'auditable_id' => $jobDetailRegisterItem->id
             ]);
         }
 
@@ -1444,11 +1466,10 @@ class JobRegistrationsControllerTest extends TestCase
 
         // STEP2
         $testingData['step2Value']['job_id'] = $job->id;
-        $testingData['step2Value']['job_tag_ids'] = [];
         if ($afterParentCategory === 'writing') {
             $testingData['step2Value'] += [
-                'article_count' => null,
-                'article_count_period' => null,
+                'article_count' => 1000, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
+                'article_count_period' => 1, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
                 'assumed_readers' => '20代女性',
                 'character_count' => 500,
                 'end_of_sentence' => 1,
@@ -1506,7 +1527,6 @@ class JobRegistrationsControllerTest extends TestCase
 
         // STEP4
         $testingData['step4Value']['job_id'] = $job->id;
-        $testingData['step4Value']['business_skill_ids'] = $testingData['businessSkills']->pluck('id')->all();
         factory(Temporariness::class)->create(
             [
                 'id' => sprintf(
@@ -1526,54 +1546,42 @@ class JobRegistrationsControllerTest extends TestCase
         $response = $this->put($this->url, [], $this->headers);
         $response->assertStatus(200);
         // assertDataの上書き
-        $testingData['assertJsonData'] = [
-            'data' => [
-                'attributes' => [
-                    'business_categories' => [
-                        [
-                            'id' => $afterParentBussinessCategory->id,
-                            'name' => $afterParentBussinessCategory->name,
-                            'link' => $afterParentBussinessCategory->parent_name,
-                            'child_categories' => [
-                                [
-                                    'id' => $afterChildBusinessCategory->id,
-                                    'name' => $afterChildBusinessCategory->name,
-                                    'link' => $afterChildBusinessCategory->parent_name
-                                ]
-                            ]
-                        ]
+        $testingData['assertJsonData']['data']['attributes']['business_categories'] = [
+            [
+                'id' => $afterParentBussinessCategory->id,
+                'name' => $afterParentBussinessCategory->name,
+                'link' => $afterParentBussinessCategory->parent_name,
+                'child_categories' => [
+                    [
+                        'id' => $afterChildBusinessCategory->id,
+                        'name' => $afterChildBusinessCategory->name,
+                        'link' => $afterChildBusinessCategory->parent_name
                     ]
                 ]
             ]
         ];
         if ($afterParentCategory === 'writing') {
-            $testingData['assertJsonData'] = [
-                'data' => [
-                    'attributes' => [
-                        'details' => [
-                            'article_count' => 1000, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
-                            'article_count_period' => 1, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
-                            'assumed_readers' => '20代女性',
-                            'character_count' => 500,
-                            'end_of_sentence' => 1,
-                            'pr_message' => '自分もショップを立ち上げたばかりの未熟者ですが、お客様に喜んでいただけるようなショップを一緒に作っていきましょう',
-                            'prohibitions' => [
-                                '他のサイトからのコピーや転載',
-                                '公序良俗に違反するような表現',
-                            ],
-                            'recommend' => [
-                                '自分のペースで仕事したい方',
-                                'スキルアップしたい方',
-                            ],
-                            'teachme' => [
-                                '1週間に何記事書けるか',
-                                'これまでのライティングの経験',
-                            ],
-                            'theme' => 3,
-                            'theme_other' => null
-                        ]
-                    ]
-                ]
+            $testingData['assertJsonData']['data']['attributes']['details'] = [
+                'article_count' => null, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
+                'article_count_period' => null, // DB登録時にnullに更新されることを確認するために、明示的に値を指定
+                'assumed_readers' => '20代女性',
+                'character_count' => 500,
+                'end_of_sentence' => 1,
+                'pr_message' => '自分もショップを立ち上げたばかりの未熟者ですが、お客様に喜んでいただけるようなショップを一緒に作っていきましょう',
+                'prohibitions' => [
+                    '他のサイトからのコピーや転載',
+                    '公序良俗に違反するような表現',
+                ],
+                'recommend' => [
+                    '自分のペースで仕事したい方',
+                    'スキルアップしたい方',
+                ],
+                'teachme' => [
+                    '1週間に何記事書けるか',
+                    'これまでのライティングの経験',
+                ],
+                'theme' => 3,
+                'theme_other' => null
             ];
         }
         $response->assertJson($testingData['assertJsonData']);
@@ -1616,12 +1624,36 @@ class JobRegistrationsControllerTest extends TestCase
             ]
         );
 
+        // タスク wall が作成されている
+        $this->assertDatabasehas(
+            'walls',
+            [
+                'job_id' => $job->id,
+                'owner_id' => $testingData['client']->id,
+                'wall_type_id' => Wall::TYPE_TASK_OUTSOURCER
+            ]
+        );
+        $this->assertDatabasehas(
+            'wall_tracks',
+            [
+                'user_id' => $testingData['client']->id
+            ]
+        );
+
         if ($beforeParentCategory === 'writing') {
             // job_detail_writing_items が削除されている
             $this->assertDatabaseMissing(
                 'job_detail_writing_items',
                 [
                     'job_id' => $job->id
+                ]
+            );
+            // JobDetailWritingItem のAuditsが削除されている
+            $this->assertDatabaseMissing(
+                'audits',
+                [
+                    'auditable_type' => $audits->auditable_type,
+                    'auditable_id' => $audits->auditable_id
                 ]
             );
         }
@@ -1632,6 +1664,14 @@ class JobRegistrationsControllerTest extends TestCase
                 'job_detail_register_items',
                 [
                     'job_id' => $job->id
+                ]
+            );
+            // JobDetailRegisterItem のAuditsが削除されている
+            $this->assertDatabaseMissing(
+                'audits',
+                [
+                    'auditable_type' => $audits->auditable_type,
+                    'auditable_id' => $audits->auditable_id
                 ]
             );
         }
@@ -1838,31 +1878,18 @@ class JobRegistrationsControllerTest extends TestCase
                             'link' => $jobTags[1]->search_name
                         ],
                     ],
-                    'business_categories' => [ // 個々のテストで上書きをする
-                        [
-                            'id' => null,
-                            'name' => null,
-                            'link' => null,
-                            'child_categories' => [
-                                [
-                                    'id' => null,
-                                    'name' => null,
-                                    'link' => null
-                                ]
-                            ]
-                        ]
-                    ],
+                    // 'business_categories' => [] // 個々のテストで上書きされる
                     'business_skills' => [
                         [
-                            'id' => $businessSkillGenre->id,
+                            'id' => (string)$businessSkillGenre->id,
                             'name' => $businessSkillGenre->name,
                             'businessSkills' => [
                                 [
-                                    'id' => $businessSkills[0]->id,
+                                    'id' => (string)$businessSkills[0]->id,
                                     'name' => $businessSkills[0]->name,
                                 ],
                                 [
-                                    'id' => $businessSkills[1]->id,
+                                    'id' => (string)$businessSkills[1]->id,
                                     'name' => $businessSkills[1]->name,
                                 ]
                             ]
@@ -1896,10 +1923,10 @@ class JobRegistrationsControllerTest extends TestCase
                             ]
                         ]
                     ],
-                    'unit_price' => $step2Value['unit_price_other'],
+                    'unit_price' => (string)$step2Value['unit_price_other'],
                     'recruitment_count' => $step2Value['capacity_other'] . '名',
                     'period' => 'あと1日',
-                    'scheduled_reward' => $step2Value['orders_per_worker_other'],
+                    'scheduled_reward' => (string)$step2Value['orders_per_worker_other'],
                     'workable_time' => $workableTime->workable_time
                 ]
             ]
@@ -1917,6 +1944,8 @@ class JobRegistrationsControllerTest extends TestCase
 
     /**
      * プロジェクトタイプの仕事を更新する場合のテスト
+     * 1：仕事タイプを変更しない（プロジェクト → プロジェクト）での更新
+     * 2：仕事タイプを変更した（タスク → プロジェクト）での更新
      *
      * @dataProvider providePut200
      *
@@ -1934,6 +1963,21 @@ class JobRegistrationsControllerTest extends TestCase
                 ['job_id' => $job->id]
             );
             $s3DocModel = Job::S3_PATH_TASK;
+
+            // タスク登録時に生成される wall
+            $wall = factory(Wall::class)->states('task_outsourcer')->create([
+                'job_id' => $job->id,
+                'owner_id' => $testingData['client']->id
+            ]);
+            $wallTrack = factory(WallTrack::class)->create([
+                'wall_id' => $wall->id,
+                'user_id' => $testingData['client']->id
+            ]);
+
+            // 仕事タイプ変更時に、変更前のauditsが削除されていることを確認するため
+            $audits = factory(Audit::class)->states('task')->create([
+                'auditable_id' => $defaultJobTypeTable->id
+            ]);
         } else { // STEP-1で仕事タイプを変更しなかった場合
             $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create();
             $defaultJobTypeTable = factory(TradeParameter::class)->create([
@@ -2045,23 +2089,17 @@ class JobRegistrationsControllerTest extends TestCase
         // Act & Assert
         $response = $this->put($this->url, [], $this->headers);
         $response->assertStatus(200);
-
-        $testingData['assertJsonData'] = [
-            'data' => [
-                'attributes' => [
-                    'business_categories' => [
-                        [
-                            'id' => $businessCategoryParent->id,
-                            'name' => $businessCategoryParent->name,
-                            'link' => $businessCategoryParent->parent_name,
-                            'child_categories' => [
-                                [
-                                    'id' => $businessCategoryChild->id,
-                                    'name' => $businessCategoryChild->name,
-                                    'link' => $businessCategoryChild->parent_name
-                                ]
-                            ]
-                        ]
+        // assertDataの上書き
+        $testingData['assertJsonData']['data']['attributes']['business_categories'] = [
+            [
+                'id' => $businessCategoryParent->id,
+                'name' => $businessCategoryParent->name,
+                'link' => $businessCategoryParent->parent_name,
+                'child_categories' => [
+                    [
+                        'id' => $businessCategoryChild->id,
+                        'name' => $businessCategoryChild->name,
+                        'link' => $businessCategoryChild->parent_name
                     ]
                 ]
             ]
@@ -2128,6 +2166,29 @@ class JobRegistrationsControllerTest extends TestCase
                     'type' => Job::TYPE_PROJECT
                 ]
             );
+
+            // タスク wall が消えている
+            $this->assertDatabaseMissing(
+                'walls',
+                [
+                    'id' => $wall->id
+                ]
+            );
+            $this->assertDatabaseMissing(
+                'wall_tracks',
+                [
+                    'id' => $wallTrack->id
+                ]
+            );
+
+            // Task のAuditsが消えている
+            $this->assertDatabaseMissing(
+                'audits',
+                [
+                    'auditable_type' => $audits->auditable_type,
+                    'auditable_id' => $audits->auditable_id
+                ]
+            );
         }
     }
 
@@ -2186,8 +2247,12 @@ class JobRegistrationsControllerTest extends TestCase
      * @param string $afterParentCategory
      * @param string $afterChildCategory
      */
-    public function testPut200ChangeCategoryProject()
-    {
+    public function testPut200ChangeCategoryProject(
+        string $beforeParentCategory,
+        string $beforeChildCategory,
+        string $afterParentCategory,
+        string $afterChildCategory
+    ) {
         // Arrange
         $testingData = $this->createProjectPut200Data();
 
@@ -2198,21 +2263,21 @@ class JobRegistrationsControllerTest extends TestCase
         if ($beforeParentCategory === 'writing' || $beforeChildCategory === 'task_register') {
             $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
                 'business_category_id' => $beforeChildBusinessCategory->id,
-                'prohibitions' => [
+                'prohibitions' => "[
                     '禁止事項1',
                     '禁止事項2'
-                ],
-                'recommend' => [
+                ]",
+                'recommend' => "[
                     'オススメ1',
                     'オススメ2'
-                ],
-                'teachme' => [
+                ]",
+                'teachme' => "[
                     '教えて欲しいこと1',
                     '教えて欲しいこと2'
-                ],
-                'pr_message' => [
+                ]",
+                'pr_message' => "[
                     'PRメッセージ'
-                ]
+                ]"
             ]);
         } else {
             $job = factory(Job::class)->states('project', 'not_active', 're_edit')->create([
@@ -2230,16 +2295,22 @@ class JobRegistrationsControllerTest extends TestCase
             ]
         );
 
-        // 変更前の仕事カテゴリーがライティングに属する場合は、job_detail_writing_itemsを作成する
+        // 変更前の仕事カテゴリーがライティングに属する場合
         if ($beforeParentCategory === 'writing') {
-            factory(JobDetailWritingItem::class)->create([
+            $jobDetailWritingItem = factory(JobDetailWritingItem::class)->create([
                 'job_id' => $job->id
             ]);
+            $audits = factory(Audit::class)->states('jobWriting')->create([
+                'auditable_id' => $jobDetailWritingItem->id
+            ]);
         }
-        // 変更前の仕事カテゴリーが商品登録の場合は、job_detail_register_itemsを作成する
+        // 変更前の仕事カテゴリーが商品登録の場合
         if ($beforeChildCategory === 'task_register') {
-            factory(JobDetailRegisterItem::class)->create([
+            $jobDetailRegisterItem = factory(JobDetailRegisterItem::class)->create([
                 'job_id' => $job->id
+            ]);
+            $audits = factory(Audit::class)->states('jobRegister')->create([
+                'auditable_id' => $jobDetailRegisterItem->id
             ]);
         }
 
@@ -2380,89 +2451,63 @@ class JobRegistrationsControllerTest extends TestCase
         $response->assertStatus(200);
 
         // assertDataの上書き
-        $testingData['assertJsonData'] = [
-            'data' => [
-                'attributes' => [
-                    'business_categories' => [
-                        [
-                            'id' => $afterParentBussinessCategory->id,
-                            'name' => $afterParentBussinessCategory->name,
-                            'link' => $afterParentBussinessCategory->parent_name,
-                            'child_categories' => [
-                                [
-                                    'id' => $afterChildBusinessCategory->id,
-                                    'name' => $afterChildBusinessCategory->name,
-                                    'link' => $afterChildBusinessCategory->parent_name
-                                ]
-                            ]
-                        ]
+        $testingData['assertJsonData']['data']['attributes']['business_categories'] = [
+            [
+                'id' => $afterParentBussinessCategory->id,
+                'name' => $afterParentBussinessCategory->name,
+                'link' => $afterParentBussinessCategory->parent_name,
+                'child_categories' => [
+                    [
+                        'id' => $afterChildBusinessCategory->id,
+                        'name' => $afterChildBusinessCategory->name,
+                        'link' => $afterChildBusinessCategory->parent_name
                     ]
                 ]
             ]
         ];
         if ($afterParentCategory === 'writing' || $afterChildCategory === 'task_register') {
-            $testingData['assertJsonData'] = [
-                'data' => [
-                    'attributes' => [
-                        'details' => [
-                            'prohibitions' => [
-                                '禁止事項1',
-                                '禁止事項2'
-                            ],
-                            'recommend' => [
-                                'オススメ1',
-                                'オススメ2'
-                            ],
-                            'teachme' => [
-                                '教えて欲しいこと1',
-                                '教えて欲しいこと2'
-                            ],
-                            'pr_message' => [
-                                'PRメッセージ'
-                            ]
-                        ]
-                    ]
+            $testingData['assertJsonData']['data']['attributes']['details'] = [
+                'prohibitions' => [
+                    '禁止事項1',
+                    '禁止事項2'
+                ],
+                'recommend' => [
+                    'オススメ1',
+                    'オススメ2'
+                ],
+                'teachme' => [
+                    '教えて欲しいこと1',
+                    '教えて欲しいこと2'
+                ],
+                'pr_message' => [
+                    'PRメッセージ'
                 ]
             ];
+            $testingData['assertJsonData']['data']['attributes']['workable_time'] = null;
         }
         if ($afterParentCategory === 'writing') {
-            $testingData['assertJsonData'] = [
-                'data' => [
-                    'attributes' => [
-                        'details' => [
-                            'article_count' => 15,
-                            'article_count_period' => 3,
-                            'assumed_readers' => '20代女性',
-                            'character_count' => 500,
-                            'end_of_sentence' => 1,
-                            'theme' => 3,
-                            'theme_other' => null
-                        ]
-                    ]
-                ]
+            $testingData['assertJsonData']['data']['attributes']['details'] = [
+                'article_count' => 15,
+                'article_count_period' => 3,
+                'assumed_readers' => '20代女性',
+                'character_count' => 500,
+                'end_of_sentence' => 1,
+                'theme' => 3,
+                'theme_other' => null
             ];
         }
         if ($afterChildCategory === 'task_register') {
-            $testingData['assertJsonData'] = [
-                'data' => [
-                    'attributes' => [
-                        'details' => [
-                            'has_trial' => 1,
-                            'trial' => 'トライアル',
-                            'has_image_creation' => 1,
-                            'image_creation' => '素材の提供有無: 有り',
-                            'has_description_creation' => 1,
-                            'description_creation' => 'リサーチした海外サイトの商品説明を全角100文字以内でリライトしていただきます。',
-                            'manual' => '今回行なっていただく作業を一通り網羅した動画マニュアルを用意しています。'
-                        ]
-                    ]
-                ]
+            $testingData['assertJsonData']['data']['attributes']['details'] = [
+                'has_trial' => 1,
+                'trial' => 'トライアル',
+                'has_image_creation' => 1,
+                'image_creation' => '素材の提供有無: 有り',
+                'has_description_creation' => 1,
+                'description_creation' => 'リサーチした海外サイトの商品説明を全角100文字以内でリライトしていただきます。',
+                'manual' => '今回行なっていただく作業を一通り網羅した動画マニュアルを用意しています。'
             ];
         }
         $response->assertJson($testingData['assertJsonData']);
-
-        // TODO: それぞれのレコードが削除・追加された処理を書く
-        // TODO: jobsのレコードのカテゴリが更新されていることをテスト
 
         // 編集前の添付ファイルが削除されている
         for ($fileIndex = 0; $fileIndex < 2; $fileIndex++) {
@@ -2505,6 +2550,14 @@ class JobRegistrationsControllerTest extends TestCase
                     'job_id' => $job->id
                 ]
             );
+            // JobDetailWritingItem のAuditsが削除されている
+            $this->assertDatabaseMissing(
+                'audits',
+                [
+                    'auditable_type' => $audits->auditable_type,
+                    'auditable_id' => $audits->auditable_id
+                ]
+            );
         }
 
         if ($beforeChildCategory === 'task_register') {
@@ -2513,6 +2566,14 @@ class JobRegistrationsControllerTest extends TestCase
                 'job_detail_register_items',
                 [
                     'job_id' => $job->id
+                ]
+            );
+            // JobDetailRegisterItem のAuditsが削除されている
+            $this->assertDatabaseMissing(
+                'audits',
+                [
+                    'auditable_type' => $audits->auditable_type,
+                    'auditable_id' => $audits->auditable_id
                 ]
             );
         }
