@@ -86,6 +86,45 @@ class ScoreUserReputationCount extends Model
     }
 
     /**
+     * 本人確認資料を提出したかどうか
+     */
+    public function getCountOfIsSupplement(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    {
+        if (! is_null($userIds)) {
+            $this->sqlUserIds = $this->getUserIds($userIds);
+        }
+
+        if (! is_null($startTime)) {
+            $this->sqlStartDay = 'AND supplement.modified >= "'.$startTime.'"';
+        }
+
+        if (! is_null($finishTime)) {
+            $this->sqlFinishDay = 'AND supplement.modified < "'.$finishTime.'"';
+        }
+
+        $records = DB::select('SELECT u.id as "user_id", '.ScoreReputation::ID_IS_SUPPLEMENT.' as "reputation_id",
+            CASE WHEN COUNT(supplement.id) > 0 THEN 1 
+            ELSE 0 
+            END as "No.4 本人確認提出",
+            FROM users u
+                LEFT JOIN s3_docs supplement
+                    ON supplement.foreign_key = u.id
+                        AND supplement.model = "User"
+                        AND supplement.group = "supplement"
+                        '.$sqlStartDay.'
+                        '.$sqlFinishDay.'
+            WHERE u.view_mode = "outsource"
+                '.$sqlUserIds.'
+                '.$sqlStartDay.'
+                '.$sqlFinishDay.'
+            GROUP BY u.id
+            ORDER BY u.id
+        ');
+
+        return $records;
+    }
+
+    /**
      * 全ての行動回数を取得する
      * 
      * @param Carbon $startTime 集計開始時
