@@ -56,18 +56,21 @@ class ScoreUserReputationCount extends Model
     public static function getCountOfAllReputation(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
     {
         $records = [];
-        array_merge($records, self::getCountOfJobAccept($finishTime, $startTime, $userIds));
-        array_merge($records, self::getIsSupplement($finishTime, $startTime, $userIds));
-        array_merge($records, self::getIsSettingThumbnail($finishTime, $startTime, $userIds));
-        array_merge($records, self::getCountOfApplyPartner($finishTime, $startTime, $userIds));
-        array_merge($records, self::getCountOfPaidDeffer($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getCountOfSomeClientReputations($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getCountOfSomeUserReputations($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getCountOfJobAccept($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getCountOfJobReEdit($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getIsSupplement($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getIsSettingThumbnail($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getCountOfApplyPartner($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getCountOfPaidDeffer($finishTime, $startTime, $userIds));
+        $records = array_merge($records, self::getCountOfDoneGettingStarted($finishTime, $startTime, $userIds));
         return $records;
     }
 
     /**
      * 下記の行動回数を取得する
      *
-     * 【初】初回審査
      * タスク：納品物の検品をする（承認）
      * タスク：納品物の検品をする（非承認）
      * プロジェクト：発注する
@@ -75,7 +78,6 @@ class ScoreUserReputationCount extends Model
      * プロジェクト：納品物の検品をする（差し戻し）
      * プロジェクト：評価する
      * プロジェクト：再発注する
-     * 自己紹介を設定する
      *
      * @param null|Carbon $finishTime 集計終了時
      * @param null|Carbon $startTime 集計開始時
@@ -88,11 +90,9 @@ class ScoreUserReputationCount extends Model
         $sqlStartDayJr = '';
         $sqlStartDayTt = '';
         $sqlStartDayT = '';
-        $sqlStartDaySp = '';
         $sqlFinishDayJr = '';
         $sqlFinishDayTt = '';
         $sqlFinishDayT = '';
-        $sqlFinishDaySp = '';
 
         if (!is_null($userIds)) {
             $sqlUserIds = self::getUserIds($userIds);
@@ -101,16 +101,13 @@ class ScoreUserReputationCount extends Model
             $sqlStartDayJr = 'AND jr.modified >= "'.$startTime.'"';
             $sqlStartDayTt = 'AND tt.modified >= "'.$startTime.'"';
             $sqlStartDayT = 'AND t.modified >= "'.$startTime.'"';
-            $sqlStartDaySp = 'AND sp.modified >= "'.$startTime.'"';
         }
         if (!is_null($finishTime)) {
             $sqlFinishDayJr = 'AND jr.modified < "'.$finishTime.'"';
             $sqlFinishDayTt = 'AND tt.modified < "'.$finishTime.'"';
             $sqlFinishDayT = 'AND t.modified < "'.$finishTime.'"';
-            $sqlFinishDaySp = 'AND sp.modified < "'.$finishTime.'"';
         }
 
-        // TODO: leftJoin がうまく行かない？
         $recordsGroupByUserId = DB::select('SELECT u.id as "user_id",
             SUM(CASE WHEN tt.state = 5 AND tt.selected = 122 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_TASK_ACCEPT_DELIVERY.'",
             SUM(CASE WHEN tt.state = 5 AND tt.selected = 123 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_TASK_REJECT_DELIVERY.'",
@@ -118,8 +115,7 @@ class ScoreUserReputationCount extends Model
             SUM(CASE WHEN t.state = 5 AND t.selected IN (122, 126) THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_PROJECT_ACCEPT_DELIVERY.'",
             SUM(CASE WHEN t.state = 5 AND t.selected = 123 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_PROJECT_REJECT_DELIVERY.'",
             SUM(CASE WHEN t.state = 6 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_FINISH.'",
-            SUM(CASE WHEN t.state = 63 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_PROJECT_REORDER.'",
-            CASE WHEN sp.id IS NULL THEN 0 ELSE 1 END as "'.ScoreReputation::ID_SET_PROFILE.'"
+            SUM(CASE WHEN t.state = 63 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_PROJECT_REORDER.'"
             FROM users u
                 LEFT JOIN job_roles jr
                     ON jr.user_id = u.id
@@ -136,17 +132,11 @@ class ScoreUserReputationCount extends Model
                         AND t.state IN (4, 5, 6, 63)
                         '.$sqlStartDayT.'
                         '.$sqlFinishDayT.'
-                LEFT JOIN selling_points sp
-                    ON sp.user_id = u.id
-                        '.$sqlStartDaySp.'
-                        '.$sqlFinishDaySp.'
             WHERE u.view_mode = "outsource"
                 '.$sqlUserIds.'
             GROUP BY u.id
             ORDER BY u.id;
         ');
-
-        dd($recordsGroupByUserId);
 
         // 整形
         $records = [];
@@ -164,7 +154,157 @@ class ScoreUserReputationCount extends Model
             }
         }
 
-        dd($records);
+        return $records;
+    }
+
+    /**
+     * 下記を取得する
+     *
+     * プロジェクト：発注する
+     * プロジェクト：納品物の検品をする（承認）
+     * プロジェクト：納品物の検品をする（差し戻し）
+     * プロジェクト：評価する
+     * プロジェクト：再発注する
+     *
+     * @param null|Carbon $finishTime 集計終了時
+     * @param null|Carbon $startTime 集計開始時
+     * @param null|array $userIds ユーザーIDの配列
+     * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
+     */
+    public static function getCountOfSomeProjectTrades(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
+    {
+        $sqlUserIds = '';
+        $sqlStartDayJr = '';
+        $sqlStartDayT = '';
+        $sqlFinishDayJr = '';
+        $sqlFinishDayT = '';
+
+        if (! is_null($userIds)) {
+            $sqlUserIds = self::getUserIds($userIds);
+        }
+        if (! is_null($startTime)) {
+            $sqlStartDayJr = 'AND jr.modified >= "'.$startTime.'"';
+            $sqlStartDayT = 'AND t.modified >= "'.$startTime.'"';
+        }
+        if (! is_null($finishTime)) {
+            $sqlFinishDayJr = 'AND jr.modified < "'.$finishTime.'"';
+            $sqlFinishDayT = 'AND t.modified < "'.$finishTime.'"';
+        }
+
+        $recordsGroupByUserId = DB::select('SELECT u.id as "user_id",
+            SUM(CASE WHEN t.state = 4 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_ORDER.'",
+            SUM(CASE WHEN t.state = 5 AND t.selected IN (122, 126) THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_PROJECT_ACCEPT_DELIVERY.'",
+            SUM(CASE WHEN t.state = 5 AND t.selected = 123 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_PROJECT_REJECT_DELIVERY.'",
+            SUM(CASE WHEN t.state = 6 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_FINISH.'",
+            SUM(CASE WHEN t.state = 63 THEN 1 ELSE 0 END) as "'.ScoreReputation::ID_PROJECT_REORDER.'"
+            FROM users u
+                INNER JOIN job_roles jr
+                    ON jr.user_id = u.id
+                        AND jr.role_id = 1
+                        '.$sqlStartDayJr.'
+                        '.$sqlFinishDayJr.'
+                INNER JOIN trades t
+                    ON t.job_id = jr.job_id
+                        AND t.state IN (4, 5, 6, 63)
+                        '.$sqlStartDayT.'
+                        '.$sqlFinishDayT.'
+            WHERE u.view_mode = "outsource"
+                '.$sqlUserIds.'
+            GROUP BY u.id
+            ORDER BY u.id;
+        ');
+
+        // 整形
+        $records = [];
+        foreach ($recordsGroupByUserId as $record) {
+            $recordArray = get_object_vars($record);
+            $userId = $recordArray['user_id'];
+            foreach ($recordArray as $key => $value) {
+                if ($key !== 'user_id' && $value !== 0) {
+                    $obj = new stdClass();
+                    $obj->user_id = $userId;
+                    $obj->reputation_id = (string)$key;
+                    $obj->count = $value;
+                    array_push($records, $obj);
+                }
+            }
+        }
+
+        return $records;
+    }
+
+    /**
+     * 下記を取得する
+     *
+     * 【初】会員登録したかどうか（DBに登録されている全てのユーザーに付与）
+     * 【初】初回審査 を行なったかどうか
+     * 自己紹介を設定したかどうか
+     *
+     * @param null|Carbon $finishTime 集計終了時
+     * @param null|Carbon $startTime 集計開始時
+     * @param null|array $userIds ユーザーIDの配列
+     * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
+     */
+    public static function getCountOfSomeUserReputations(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
+    {
+        $sqlUserIds = '';
+        $sqlStartDayU = '';
+        $sqlStartDayAc = '';
+        $sqlStartDaySp = '';
+        $sqlFinishDayU = '';
+        $sqlFinishDayAc = '';
+        $sqlFinishDaySp = '';
+
+        if (! is_null($userIds)) {
+            $sqlUserIds = self::getUserIds($userIds);
+        }
+        if (! is_null($startTime)) {
+            $sqlStartDayAc = 'AND u.antisocial_check_date >= "'.$startTime.'"';
+            $sqlStartDaySp = 'AND sp.modified >= "'.$startTime.'"';
+            $sqlStartDayU = 'AND u.created >= "'.$startTime.'"';
+        }
+        if (! is_null($finishTime)) {
+            $sqlFinishDayAc = 'AND u.antisocial_check_date < "'.$finishTime.'"';
+            $sqlFinishDaySp = 'AND sp.modified < "'.$finishTime.'"';
+            $sqlFinishDayU = 'AND u.created < "'.$finishTime.'"';
+        }
+
+        $recordsGroupByUserId = DB::select('SELECT u.id as "user_id",
+            1 as "'.ScoreReputation::ID_REGISTRATION.'",
+            CASE u.antisocial
+                WHEN u.antisocial_check_date IS NOT NULL
+                    '.$sqlStartDayAc.'
+                    '.$sqlFinishDayAc.'
+                THEN 1
+                ELSE 0
+                END as "'.ScoreReputation::ID_INIT_SCREENING.'",
+            CASE WHEN sp.id IS NULL THEN 0 ELSE 1 END as "'.ScoreReputation::ID_SET_PROFILE.'"
+            FROM users u
+                LEFT JOIN selling_points sp
+                    ON sp.user_id = u.id
+                        '.$sqlStartDaySp.'
+                        '.$sqlFinishDaySp.'
+            WHERE u.view_mode = "outsource"
+                '.$sqlUserIds.'
+            GROUP BY u.id
+            ORDER BY u.id
+        ');
+
+        // 整形
+        $records = [];
+        foreach ($recordsGroupByUserId as $record) {
+            $recordArray = get_object_vars($record);
+            $userId = $recordArray['user_id'];
+            foreach ($recordArray as $key => $value) {
+                if ($key !== 'user_id' && $value !== 0) {
+                    $obj = new stdClass();
+                    $obj->user_id = $userId;
+                    $obj->reputation_id = (string)$key;
+                    $obj->count = $value;
+                    array_push($records, $obj);
+                }
+            }
+        }
 
         return $records;
     }
@@ -187,26 +327,24 @@ class ScoreUserReputationCount extends Model
             $sqlUserIds = self::getUserIds($userIds);
         }
         if (! is_null($startTime)) {
-            $sqlStartDay = 'AND j.modified >= "'.$startTime.'"';
+            $sqlStartDay = 'AND j.activated_date >= "'.$startTime.'"';
         }
         if (! is_null($finishTime)) {
-            $sqlFinishDay = 'AND j.modified < "'.$finishTime.'"';
+            $sqlFinishDay = 'AND j.activated_date < "'.$finishTime.'"';
         }
 
         $records = DB::select('SELECT u.id as "user_id", '.ScoreReputation::ID_JOB_ACCEPT.' as "reputation_id", COUNT(j.id) as "count"
             FROM users u
-                LEFT JOIN job_roles jr
+                INNER JOIN job_roles jr
                     ON u.id = jr.user_id
                         AND jr.role_id = 1
-                LEFT JOIN jobs j
+                INNER JOIN jobs j
                     ON j.id = jr.job_id
                         AND j.activated = 1
                         '.$sqlStartDay.'
                         '.$sqlFinishDay.'
             WHERE u.view_mode = "outsource"
                 '.$sqlUserIds.'
-                '.$sqlStartDay.'
-                '.$sqlFinishDay.'
             GROUP BY u.id
             ORDER BY u.id
         ');
@@ -242,10 +380,10 @@ class ScoreUserReputationCount extends Model
         $sql = <<<__SQL__
             SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', COUNT(ad.id) as 'count'
                 FROM users u
-                    LEFT JOIN job_roles jr
+                    INNER JOIN job_roles jr
                         ON u.id = jr.user_id
                             AND jr.role_id = 1
-                    LEFT JOIN audits ad
+                    INNER JOIN audits ad
                         ON u.id = ad.user_id
                             AND ad.auditable_id = jr.job_id
                             AND ad.event = 'updated'
@@ -264,7 +402,7 @@ __SQL__;
     }
 
     /**
-     * 【初】本人確認資料を提出したかどうか
+     * 【初】本人確認資料を提出した回数を取得する
      *
      * @param null|Carbon $finishTime 集計終了時
      * @param null|Carbon $startTime 集計開始時
@@ -287,12 +425,11 @@ __SQL__;
             $sqlFinishDay = 'AND supplement.modified < "'.$finishTime.'"';
         }
 
-        $records = DB::select('SELECT u.id as "user_id", '.ScoreReputation::ID_IS_SUPPLEMENT.' as "reputation_id",
-            CASE WHEN COUNT(supplement.id) > 0 THEN 1
-            ELSE 0 
-            END as "count"
+        $records = DB::select('SELECT u.id as "user_id",
+            '.ScoreReputation::ID_IS_SUPPLEMENT.' as "reputation_id",
+            COUNT(supplement.id) as "count"
             FROM users u
-                LEFT JOIN s3_docs supplement
+                INNER JOIN s3_docs supplement
                     ON supplement.foreign_key = u.id
                         AND supplement.model = "User"
                         AND supplement.group = "supplement"
@@ -308,7 +445,7 @@ __SQL__;
     }
 
     /**
-     * 【初】アイコンを設定したかどうか
+     * 【初】アイコンを設定した回数を取得する
      *
      * @param null|Carbon $finishTime 集計終了時
      * @param null|Carbon $startTime 集計開始時
@@ -331,12 +468,11 @@ __SQL__;
             $sqlFinishDay = 'AND thumbnail.created < "'.$finishTime.'"';
         }
 
-        $records = DB::select('SELECT u.id as "user_id", '.ScoreReputation::ID_IS_SETTING_THUMBNAIL.' as "reputation_id",
-            CASE WHEN COUNT(thumbnail.id) > 0 THEN 1 
-            ELSE 0 
-            END as "count"
+        $records = DB::select('SELECT u.id as "user_id",
+            '.ScoreReputation::ID_IS_SETTING_THUMBNAIL.' as "reputation_id",
+            COUNT(thumbnail.id) as "count"
             FROM users u
-                LEFT JOIN s3_docs thumbnail
+                INNER JOIN s3_docs thumbnail
                     ON thumbnail.foreign_key = u.id
                         AND thumbnail.group = "thumbnail"
                         '.$sqlStartDay.'
@@ -376,7 +512,7 @@ __SQL__;
 
         $records = DB::select('SELECT u.id as "user_id", '.ScoreReputation::ID_APPLY_PARTNER.' as "reputation_id", COUNT(p.id) as "count"
             FROM users u
-                LEFT JOIN partners p
+                INNER JOIN partners p
                     ON p.outsourcer_id = u.id
                     '.$sqlStartDay.'
                     '.$sqlFinishDay.'
@@ -419,11 +555,11 @@ __SQL__;
                 WHEN COUNT(DISTINCT pl.id) = 0 IS NULL THEN 0
                 END as "count"
             FROM users u
-                LEFT JOIN point_details pd
+                INNER JOIN point_details pd
                     ON u.id = pd.user_id
                     '.$sqlStartDay.'
                     '.$sqlFinishDay.'
-                LEFT JOIN point_logs pl
+                INNER JOIN point_logs pl
                     ON pl.id = pd.point_log_id
                     AND pl.detail = 27
             WHERE u.view_mode = "outsource"
@@ -433,6 +569,50 @@ __SQL__;
         ');
 
         return $records;
+    }
+
+    /**
+     * 開始準備済みが行われた回数を取得する
+     *
+     * @param null|Carbon $finishTime 集計終了時
+     * @param null|Carbon $startTime 集計開始時
+     * @param null|array $userIds ユーザーIDの配列
+     * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
+     */
+    public static function getCountOfDoneGettingStarted(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
+    {
+        $sqlUserIds = '';
+        $sqlStartDay = '';
+        $sqlFinishDay = '';
+
+        if (! is_null($userIds)) {
+            $sqlUserIds = self::getUserIds($userIds);
+        }
+        if (! is_null($startTime)) {
+            $sqlStartDay = 'AND ad.created_at >= "'.$startTime.'"';
+        }
+        if (! is_null($finishTime)) {
+            $sqlFinishDay = 'AND ad.created_at < "'.$finishTime.'"';
+        }
+        $reputationId = ScoreReputation::ID_DONE_GETTING_STARTED;
+
+        $sql = <<<__SQL__
+            SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', COUNT(ad.id) as 'count'
+                FROM users u
+                    INNER JOIN audits ad
+                        ON u.id = ad.user_id
+                            AND ad.event = 'updated'
+                            AND ad.auditable_type = 'User'
+                            AND ad.old_values LIKE '%"group_id":7%'
+                            {$sqlStartDay}
+                            {$sqlFinishDay}
+                WHERE u.view_mode = 'outsource'
+                    {$sqlUserIds}
+                GROUP BY u.id
+                ORDER BY u.id
+__SQL__;
+
+        return DB::select($sql);
     }
 
     private static function getUserIds(array $userIds): string
