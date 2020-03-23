@@ -5,6 +5,9 @@ namespace App\Domain\ScoreReputation;
 use App\Domain\ScoreReputation\ReputationCountAbstract;
 use App\Models\ScoreReputation;
 
+use Carbon\Carbon;
+use DB;
+
 /**
  * スコアリング対象の行動回数を取得する（クライアント）
  */
@@ -14,7 +17,7 @@ class ClientReputationCount extends ReputationCountAbstract
     // 1:1の関係がある行動が対象となっている
     const TARGET_REPUTATION_METHODS = [
         ScoreReputation::ID_CLIENT_REGISTRATION => 'getCountOfRegistration', // 【初】会員登録する
-        ScoreReputation::ID_CLIENT_GETTING_STARTED　=> 'getCountOfGettingStarted', // 【初】開始準備
+        ScoreReputation::ID_CLIENT_GETTING_STARTED => 'getCountOfGettingStarted', // 【初】開始準備
         ScoreReputation::ID_CLIENT_INIT_SCREENING => 'getCountOfInitScreening', // 【初】初回審査
         ScoreReputation::ID_CLIENT_SUPPLEMENT => 'getCountOfSupplement', // 【初】本人確認提出
         ScoreReputation::ID_JOB_RE_EDIT => 'getCountOfJobReEdit', // 差し戻された仕事を修正して再申請する
@@ -41,10 +44,19 @@ class ClientReputationCount extends ReputationCountAbstract
     ];
 
     /**
-     * 全ての行動回数を取得する（クライアント)
+     * 全ての行動回数を取得する
+     *
+     * @param null|Carbon $startTime 集計開始時
+     * @param null|Carbon $finishTime 集計終了時
+     * @param null|array $userIds ユーザーIDの配列
+     * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
+     * @throws Exception
      */
-    public function getAllReputationCount(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
-    {
+    public function getAllReputationCount(
+        Carbon $finishTime = null,
+        Carbon $startTime = null,
+        array $userIds = null
+    ): array {
         $records = [];
 
         $records = array_merge($records, $this->getCountOfSomeTaskTrades($finishTime, $startTime, $userIds)); // 取引：タスク関連の行動回数
@@ -64,10 +76,21 @@ class ClientReputationCount extends ReputationCountAbstract
     }
 
     /**
-     * 対象の行動回数を取得する（クライアント or ワーカー）
+     * 対象の行動回数を取得する
+     *
+     * @param array $targetReputations
+     * @param null|Carbon $startTime 集計開始時
+     * @param null|Carbon $finishTime 集計終了時
+     * @param null|array $userIds ユーザーIDの配列
+     * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
+     * @throws Exception
      */
-    public function getTargetReputationCount(array $targetReputations): array
-    {
+    public function getTargetReputationCount(
+        array $targetReputations,
+        Carbon $finishTime = null,
+        Carbon $startTime = null,
+        array $userIds = null
+    ): array {
         $records = [];
 
         // 1:1関係にある行動回数を返却する
@@ -78,11 +101,13 @@ class ClientReputationCount extends ReputationCountAbstract
             }
         }
         // タスク取引関連の行動回数が取得される場合
-        if (array_intersect($targetReputations, self::SOME_TASK_TRADE_REPUTATIONS)) {
+        // 単体で取得されることは現段階では想定していない
+        if (array_values(array_intersect($targetReputations, self::SOME_TASK_TRADE_REPUTATIONS)) === self::SOME_TASK_TRADE_REPUTATIONS) {
             $records = array_merge($records, $this->getCountOfSomeTaskTrades($finishTime, $startTime, $userIds));
         }
         // プロジェクト取引関連の行動回数が取得される場合
-        if (array_intersect($targetReputations, self::SOME_PROJECT_TRADE_REPUTATIONS)) {
+        // 単体で取得されることは現段階では想定していない
+        if (array_values(array_intersect($targetReputations, self::SOME_PROJECT_TRADE_REPUTATIONS)) === self::SOME_PROJECT_TRADE_REPUTATIONS) {
             $records = array_merge($records, $this->getCountOfSomeProjectTrades($finishTime, $startTime, $userIds));
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Domain\ScoreReputation;
 
+use Carbon\Carbon;
 use Exception;
 use stdClass;
 
@@ -10,12 +11,21 @@ abstract class ReputationCountAbstract
     /**
      * 全ての行動回数を取得する（クライアント or ワーカー）
      */
-    abstract public function getAllReputationCount(): array;
+    abstract public function getAllReputationCount(
+        Carbon $finishTime = null,
+        Carbon $startTime = null,
+        array $userIds = null
+    ): array;
 
     /**
      * 対象の行動回数を取得する（クライアント or ワーカー）
      */
-    abstract public function getTargetReputationCount(): array;
+    abstract public function getTargetReputationCount(
+        array $targetReputations,
+        Carbon $finishTime = null,
+        Carbon $startTime = null,
+        array $userIds = null
+    ): array;
 
     /**
      * ユーザーidが指定された際に、条件指定で用いるsql句を返却する
