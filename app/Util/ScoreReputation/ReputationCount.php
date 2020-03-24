@@ -2,18 +2,18 @@
 
 namespace App\Domain\ScoreReputation;
 
-use App\Domain\ScoreReputation\ReputationCountAbstract;
 use App\Domain\ScoreReputation\ClientReputationCount;
 use App\Domain\ScoreReputation\WorkerReputationCount;
 
+use Carbon\Carbon;
 use DB;
 use Exception;
 use Log;
 
 /**
- * 行動回数の関心ごとを扱う
+ * スコアリング対象の行動回数に関する関心ごとを扱う
  * 現段階では、各行動は「ワーカー」「クライアント」の2区分のみであるため、このクラスで差分を吸収している
- * TODO：行動区分が増えれば、各行動取得クラスをメソッドから依存注入することを検討する
+ * TODO：行動区分が増えれば、各行動を流動的要素と見なし、メソッドから各行動取得クラスを依存注入することを検討する
  */
 class ReputationCount
 {
@@ -48,18 +48,18 @@ class ReputationCount
     /**
      * 全ての行動回数を取得する（ワーカー）
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions 指定条件
+     * $conditions = [
+     *     'startTime' => Carbon / 集計開始時,
+     *     'finishTime' => Carbon / 集計終了時,
+     *     'userIds' => array / 指定したいユーザーIDの配列
+     * ]
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getAllWorkerReputationCount(
-        Carbon $finishTime = null,
-        Carbon $startTime = null,
-        array $userIds = null
-    ): array {
-        return $this->workerReputationCount->getAllReputationCount($finishTime, $startTime, $userIds);
+    public function getAllWorkerReputationCount(array $conditions): array
+    {
+        return $this->workerReputationCount->getAllReputationCount($conditions);
     }
 
     /**
@@ -110,7 +110,7 @@ class ReputationCount
     {
         // 保存対象のレコードが存在しないケース
         if (empty($records)) {
-            Log::info('ScoreUserReputationCount::saveByRecords()で保存するレコードはありませんでした');
+            Log::info('保存対象のレコードはありませんでした');
             return;
         }
 

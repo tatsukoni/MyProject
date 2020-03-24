@@ -2,17 +2,21 @@
 
 namespace App\Domain\ScoreReputation;
 
-use App\Domain\ScoreReputation\ReputationCountAbstract;
+use App\Domain\ScoreReputation\ReputationCountInterface;
+use App\Domain\ScoreReputation\ReputationCountTrait;
 use App\Models\ScoreReputation;
 
 use Carbon\Carbon;
 use DB;
+use Exception;
 
 /**
  * スコアリング対象の行動回数を取得する（ワーカー）
  */
-class WorkerReputationCount extends ReputationCountAbstract
+class WorkerReputationCount implements ReputationCountInterface
 {
+    use ReputationCountTrait;
+
     // 対象の行動と、その回数を取得するメソッド名との紐付けを行う
     // 1:1の関係がある行動が対象となっている
     // 何かの行動回数を取得する関数を作成した場合は、下記に追加してください
@@ -20,7 +24,7 @@ class WorkerReputationCount extends ReputationCountAbstract
         ScoreReputation::ID_WORKER_REGISTRATION => 'getCountOfRegistration', // 【初】会員登録する
         ScoreReputation::ID_WORKER_GETTING_STARTED => 'getCountOfGettingStarted', // 【初】開始準備
         ScoreReputation::ID_POST_QUESTION => 'getCountOfPostQuestion', // 質問を投稿する
-        ScoreReputation::ID_PROPOSAL => 'getCounttOfProposal', // 仕事に応募する
+        ScoreReputation::ID_PROPOSAL => 'getCountOfProposal', // 仕事に応募する
         ScoreReputation::ID_TASK_DELIVERY => 'getCountOfTaskDelivery', // タスク：納品する
         ScoreReputation::ID_TASK_GET_REWARD => 'getCountOfTaskGetReward', // タスク：報酬を獲得する
         ScoreReputation::ID_PROJECT_DELIVERY => 'getCountOfProjectDelivery', // プロジェクト：納品する
@@ -36,21 +40,20 @@ class WorkerReputationCount extends ReputationCountAbstract
     /**
      * 全ての行動回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions 指定条件
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getAllReputationCount(
-        Carbon $finishTime = null,
-        Carbon $startTime = null,
-        array $userIds = null
-    ): array {
+    public function getAllReputationCount(array $conditions): array 
+    {
+        if (! $this->checkConditions($conditions)) {
+            throw new Exception('引数で渡された$conditionsが適切でありません');
+        }
         $records = [];
 
+        // 全ての行動回数を返却する
         foreach (self::TARGET_REPUTATION_METHODS as $targetReputation => $targetMethod) {
-            $records = array_merge($records, $this->$targetMethod($finishTime, $startTime, $userIds));
+            $records = array_merge($records, $this->$targetMethod($conditions));
         }
 
         return $records;
@@ -59,25 +62,22 @@ class WorkerReputationCount extends ReputationCountAbstract
     /**
      * 対象の行動回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $targetReputations 指定したい行動IDの配列
+     * @param array $conditions 指定条件
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getTargetReputationCount(
-        array $targetReputations,
-        Carbon $finishTime = null,
-        Carbon $startTime = null,
-        array $userIds = null
-    ): array {
+    public function getTargetReputationCount(array $targetReputations, array $conditions): array {
+        if (! $this->checkConditions($conditions)) {
+            throw new Exception('引数で渡された$conditionsが適切でありません');
+        }
         $records = [];
 
         // 1:1関係にある行動回数を返却する
         foreach ($targetReputations as $targetReputation) {
             if (array_key_exists($targetReputation, self::TARGET_REPUTATION_METHODS)) {
                 $method = self::TARGET_REPUTATION_METHODS[$targetReputation];
-                $records = array_merge($records, $this->$method($finishTime, $startTime, $userIds));
+                $records = array_merge($records, $this->$method($conditions));
             }
         }
 
@@ -87,26 +87,24 @@ class WorkerReputationCount extends ReputationCountAbstract
     /**
      * 【初】会員登録したかどうかを取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions 指定条件
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfRegistration(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
+    private function getCountOfRegistration(array $conditions): array
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(u.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('u.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(u.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('u.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_WORKER_REGISTRATION;
 
@@ -127,26 +125,24 @@ __SQL__;
     /**
      * 【初】開始準備済みかどうかを取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfGettingStarted(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
+    private function getCountOfGettingStarted(array $conditions): array
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(u.modified, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('u.modified', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(u.modified, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('u.modified', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_WORKER_GETTING_STARTED;
 
@@ -168,26 +164,24 @@ __SQL__;
     /**
      * 仕事に質問を投稿した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfPostQuestion(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfPostQuestion(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(th.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('th.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(th.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('th.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_POST_QUESTION;
 
@@ -215,26 +209,24 @@ __SQL__;
     /**
      * 仕事に応募した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCounttOfProposal(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfProposal(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(jr.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('jr.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(jr.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('jr.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_PROPOSAL;
 
@@ -259,26 +251,24 @@ __SQL__;
     /**
      * タスク：納品した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfTaskDelivery(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfTaskDelivery(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(tt.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('tt.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(tt.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('tt.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_TASK_DELIVERY;
 
@@ -303,26 +293,24 @@ __SQL__;
     /**
      * タスク：報酬を獲得した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfTaskGetReward(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfTaskGetReward(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(w.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('w.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(w.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('w.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_TASK_GET_REWARD;
 
@@ -349,26 +337,24 @@ __SQL__;
     /**
      * プロジェクト：納品した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfProjectDelivery(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfProjectDelivery(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(t.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('t.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(t.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('t.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_PROJECT_DELIVERY;
 
@@ -393,26 +379,24 @@ __SQL__;
     /**
      * プロジェクト：報酬を獲得した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfProjectGetRewards(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfProjectGetRewards(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(t.modified, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('t.modified', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(t.modified, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('t.modified', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_PROJECT_GET_REWARD;
 
@@ -438,26 +422,24 @@ __SQL__;
     /**
      * プロジェクト：評価した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfRating(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfRating(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(r.modified, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('r.modified', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(r.modified, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('r.modified', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_WORKER_PROJECT_RATING;
 
@@ -481,26 +463,24 @@ __SQL__;
     /**
      * プロジェクト：再受注した回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfAcceptReorder(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfAcceptReorder(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(t.modified, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('t.modified', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(t.modified, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('t.modified', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_PROJECT_ACCEPT_REORDER;
 
@@ -525,26 +505,24 @@ __SQL__;
     /**
      * 【初】アイコンが設定されているかどうかを取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfSettingThumbnail(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfSettingThumbnail(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(thumbnail.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('thumbnail.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(thumbnail.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('thumbnail.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_WORKER_SETTING_THUMBNAIL;
 
@@ -569,26 +547,24 @@ __SQL__;
     /**
      * 【初】自己紹介が設定されているかどうかを取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfSetProfile(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null): array
+    private function getCountOfSetProfile(array $conditions): array
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(sp.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('sp.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(sp.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('sp.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_WORKER_SET_PROFILE;
 
@@ -611,26 +587,24 @@ __SQL__;
     /**
      * 【初】本人確認を設定したかどうかを取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfSetSupplement(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfSetSupplement(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(u.modified, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('u.modified', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(u.modified, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('u.modified', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_WORKER_SET_SUPPLEMENT;
 
@@ -653,26 +627,24 @@ __SQL__;
     /**
      * 報酬を受け取った回数を取得する
      *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getCountOfReceiveReward(Carbon $finishTime = null, Carbon $startTime = null, array $userIds = null)
+    private function getCountOfReceiveReward(array $conditions)
     {
         $sqlUserIds = '';
         $sqlStartDay = '';
         $sqlFinishDay = '';
 
-        if (! is_null($userIds)) {
-            $sqlUserIds = $this->getUserIds($userIds);
+        if (array_key_exists('userIds', $conditions)) {
+            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
         }
-        if (! is_null($startTime)) {
-            $sqlStartDay = "AND CONVERT_TZ(pl.created, '+00:00', '+09:00') >= "."'".$startTime."'";
+        if (array_key_exists('startTime', $conditions)) {
+            $sqlStartDay = $this->getSqlStartDay('pl.created', $conditions['startTime']);
         }
-        if (! is_null($finishTime)) {
-            $sqlFinishDay = "AND CONVERT_TZ(pl.created, '+00:00', '+09:00') < "."'".$finishTime."'";
+        if (array_key_exists('finishTime', $conditions)) {
+            $sqlFinishDay = $this->getSqlFininshDay('pl.created', $conditions['finishTime']);
         }
         $reputationId = ScoreReputation::ID_RECEIVE_REWARD;
 

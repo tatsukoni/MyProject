@@ -40,6 +40,14 @@ class WorkerReputationCountTest extends TestCase
     }
 
     /**
+     * private な各メソッドをテストするため
+     */
+    public function getAccessibleMethod(string $methodName)
+    {
+        return $this->unprotect($this->workerReputationCount, $methodName);
+    }
+
+    /**
      * ワーカーの全ての行動テストデータを作成する
      * 何かの行動回数を取得する関数を作成した場合は、下記に追加してください
      */
@@ -48,7 +56,7 @@ class WorkerReputationCountTest extends TestCase
         $this->createDataGetCountOfRegistration(); // 【初】会員登録する_テストデータ作成
         $this->createDataGetCountOfGettingStarted(); // 【初】開始準備_テストデータ作成
         $this->createDataGetCountOfPostQuestion(); // 質問を投稿する_テストデータ作成
-        $this->createDataGetCounttOfProposal(); // 仕事に応募する_テストデータ作成
+        $this->createDataGetCountOfProposal(); // 仕事に応募する_テストデータ作成
         $this->createDataGetCountOfTaskDelivery(); // タスク：納品する_テストデータ作成
         $this->createDataGetCountOfTaskGetReward(); // タスク：報酬を獲得する_テストデータ作成
         $this->createDataGetCountOfProjectDelivery(); // プロジェクト：納品する_テストデータ作成
@@ -71,25 +79,25 @@ class WorkerReputationCountTest extends TestCase
 
         // Act
         // 1つ1つのメソッドで取得した合計
-        $recordsGetCountOfRegistration = $this->workerReputationCount->getCountOfRegistration(); // 【初】会員登録する
-        $recordsGetCountOfGettingStarted = $this->workerReputationCount->getCountOfGettingStarted(); // 【初】開始準備
-        $recordsGetCountOfPostQuestion = $this->workerReputationCount->getCountOfPostQuestion(); // 質問を投稿する
-        $recordsGetCounttOfProposal = $this->workerReputationCount->getCounttOfProposal(); // 仕事に応募する
-        $recordsGetCountOfTaskDelivery = $this->workerReputationCount->getCountOfTaskDelivery(); // タスク：納品する
-        $recordsGetCountOfTaskGetReward = $this->workerReputationCount->getCountOfTaskGetReward(); // タスク：報酬を獲得する
-        $recordsGetCountOfProjectDelivery = $this->workerReputationCount->getCountOfProjectDelivery(); // プロジェクト：納品する
-        $recordsGetCountOfProjectGetRewards = $this->workerReputationCount->getCountOfProjectGetRewards(); // プロジェクト：報酬を獲得する
-        $recordsGetCountOfRating = $this->workerReputationCount->getCountOfRating(); // プロジェクト：評価する
-        $recordsGetCountOfAcceptReorder = $this->workerReputationCount->getCountOfAcceptReorder(); // プロジェクト：再受注する
-        $recordsGetCountOfSettingThumbnail = $this->workerReputationCount->getCountOfSettingThumbnail(); // 【初】アイコンを設定する
-        $recordsGetCountOfSetProfile = $this->workerReputationCount->getCountOfSetProfile(); // 【初】自己紹介を設定する
-        $recordsGetCountOfSetSupplement = $this->workerReputationCount->getCountOfSetSupplement(); // 【初】本人確認を設定する
-        $recordsGetCountOfReceiveReward = $this->workerReputationCount->getCountOfReceiveReward(); // 報酬を受け取る
+        $recordsGetCountOfRegistration = $this->getAccessibleMethod('getCountOfRegistration')->invoke($this->workerReputationCount, []); // 【初】会員登録する
+        $recordsGetCountOfGettingStarted = $this->getAccessibleMethod('getCountOfGettingStarted')->invoke($this->workerReputationCount, []); // 【初】開始準備
+        $recordsGetCountOfPostQuestion = $this->getAccessibleMethod('getCountOfPostQuestion')->invoke($this->workerReputationCount, []); // 質問を投稿する
+        $recordsGetCountOfProposal = $this->getAccessibleMethod('getCountOfProposal')->invoke($this->workerReputationCount, []); // 仕事に応募する
+        $recordsGetCountOfTaskDelivery = $this->getAccessibleMethod('getCountOfTaskDelivery')->invoke($this->workerReputationCount, []); // タスク：納品する
+        $recordsGetCountOfTaskGetReward = $this->getAccessibleMethod('getCountOfTaskGetReward')->invoke($this->workerReputationCount, []); // タスク：報酬を獲得する
+        $recordsGetCountOfProjectDelivery = $this->getAccessibleMethod('getCountOfProjectDelivery')->invoke($this->workerReputationCount, []); // プロジェクト：納品する
+        $recordsGetCountOfProjectGetRewards = $this->getAccessibleMethod('getCountOfProjectGetRewards')->invoke($this->workerReputationCount, []); // プロジェクト：報酬を獲得する
+        $recordsGetCountOfRating = $this->getAccessibleMethod('getCountOfRating')->invoke($this->workerReputationCount, []); // プロジェクト：評価する
+        $recordsGetCountOfAcceptReorder = $this->getAccessibleMethod('getCountOfAcceptReorder')->invoke($this->workerReputationCount, []); // プロジェクト：再受注する
+        $recordsGetCountOfSettingThumbnail = $this->getAccessibleMethod('getCountOfSettingThumbnail')->invoke($this->workerReputationCount, []); // 【初】アイコンを設定する
+        $recordsGetCountOfSetProfile = $this->getAccessibleMethod('getCountOfSetProfile')->invoke($this->workerReputationCount, []); // 【初】自己紹介を設定する
+        $recordsGetCountOfSetSupplement = $this->getAccessibleMethod('getCountOfSetSupplement')->invoke($this->workerReputationCount, []); // 【初】本人確認を設定する
+        $recordsGetCountOfReceiveReward = $this->getAccessibleMethod('getCountOfReceiveReward')->invoke($this->workerReputationCount, []); // 報酬を受け取る
 
         $resultSumRecordsCount = count($recordsGetCountOfRegistration)
             + count($recordsGetCountOfGettingStarted)
             + count($recordsGetCountOfPostQuestion)
-            + count($recordsGetCounttOfProposal)
+            + count($recordsGetCountOfProposal)
             + count($recordsGetCountOfTaskDelivery)
             + count($recordsGetCountOfTaskGetReward)
             + count($recordsGetCountOfProjectDelivery)
@@ -102,7 +110,7 @@ class WorkerReputationCountTest extends TestCase
             + count($recordsGetCountOfReceiveReward);
 
         // getAllReputationCount() で取得した場合の合計
-        $recordsOfAll = $this->workerReputationCount->getAllReputationCount();
+        $recordsOfAll = $this->workerReputationCount->getAllReputationCount([]);
         $resultAllRecordsCount = count($recordsOfAll);
 
         // Assert
@@ -140,7 +148,7 @@ class WorkerReputationCountTest extends TestCase
         $this->createDataAllWorkerReputation();
 
         // Act
-        $records = $this->workerReputationCount->getTargetReputationCount($targetReputations);
+        $records = $this->workerReputationCount->getTargetReputationCount($targetReputations, []);
 
         // Assert
         // 指定された行動郡のみが取得されること
@@ -151,29 +159,29 @@ class WorkerReputationCountTest extends TestCase
         foreach ($targetReputations as $targetReputation) {
             $targetRecordKeys = $this->getTargetReputationId($records, $targetReputation);
             $this->assertNotEmpty($targetRecordKeys);
-        } 
+        }
     }
 
     public function providerTestGetCount()
     {
         return
         [
-            '引数なし' => [
+            '条件の指定がない場合' => [
                 false, // hasFinishTime
                 false, // hasStartTime
                 false // hasUserIds
             ],
-            'finishTime が渡された場合' => [
+            '集計終了時が指定された場合' => [
                 true,
                 false,
                 false
             ],
-            'startTime が渡された場合' => [
+            '集計開始時が指定された場合' => [
                 false,
                 true,
                 false
             ],
-            'userIds が渡された場合' => [
+            'ユーザーIDが指定された場合' => [
                 false,
                 false,
                 true
@@ -212,24 +220,29 @@ class WorkerReputationCountTest extends TestCase
         $userIds = [$createData['user1']->id]; // user1 を明示的に指定するようにする
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfRegistration();
+        $method = $this->getAccessibleMethod('getCountOfRegistration');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals(1, $records[0]->count); // user1
             $this->assertEquals(1, $records[1]->count); // user2
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfRegistration($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 の件数が取得されること
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfRegistration(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user2']->id, $records[0]->user_id); // user2 の件数が取得されること
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfRegistration(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定された1ユーザーしか取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 しか取得されないこと
         }
@@ -246,7 +259,8 @@ class WorkerReputationCountTest extends TestCase
         factory(User::class)->states('resigned')->create(); // 退会済み
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfRegistration();
+        $method = $this->getAccessibleMethod('getCountOfRegistration');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -283,24 +297,29 @@ class WorkerReputationCountTest extends TestCase
         $userIds = [$createData['user1']->id]; // user1 を明示的に指定するようにする
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfGettingStarted();
+        $method = $this->getAccessibleMethod('getCountOfGettingStarted');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals(1, $records[0]->count); // user1
             $this->assertEquals(1, $records[1]->count); // user2
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfGettingStarted($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfGettingStarted(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records);
             $this->assertEquals($createData['user2']->id, $records[0]->user_id); // user2
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfGettingStarted(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定の1ユーザーしか取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 しか取得されないこと
         }
@@ -315,7 +334,8 @@ class WorkerReputationCountTest extends TestCase
         factory(User::class)->states('worker', 'pre_user')->create(); // 開始準備を行っていない
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfGettingStarted();
+        $method = $this->getAccessibleMethod('getCountOfGettingStarted');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -367,26 +387,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfPostQuestion();
+        $method = $this->getAccessibleMethod('getCountOfPostQuestion');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfPostQuestion($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfPostQuestion(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfPostQuestion(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -434,11 +459,12 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfPostQuestion();
+        $method = $this->getAccessibleMethod('getCountOfPostQuestion');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
-    public function createDataGetCounttOfProposal()
+    public function createDataGetCountOfProposal()
     {
         $user1 = factory(User::class)->states('worker')->create();
         // countの対象となる job_roles を作成する
@@ -473,10 +499,10 @@ class WorkerReputationCountTest extends TestCase
      * @param bool $hasStartTime
      * @param bool $hasUserIds
      */
-    public function testGetCounttOfProposal($hasFinishTime, $hasStartTime, $hasUserIds)
+    public function testGetCountOfProposal($hasFinishTime, $hasStartTime, $hasUserIds)
     {
         // Arrange
-        $createData = $this->createDataGetCounttOfProposal();
+        $createData = $this->createDataGetCountOfProposal();
 
         $startTime = $this->baseDatetime->copy()->addSeconds(3); // 日本時間
         $finishTime = $this->baseDatetime->copy()->addSeconds(7); // 日本時間
@@ -484,26 +510,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCounttOfProposal();
+        $method = $this->getAccessibleMethod('getCountOfProposal');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCounttOfProposal($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCounttOfProposal(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCounttOfProposal(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -512,7 +543,7 @@ class WorkerReputationCountTest extends TestCase
     /**
      * 仕事に応募した回数_条件外のデータは取得されないこと
      */
-    public function testGetCounttOfProposalInvalid()
+    public function testGetCountOfProposalInvalid()
     {
         // Arrange
         $user = factory(User::class)->states('worker')->create();
@@ -529,7 +560,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCounttOfProposal();
+        $method = $this->getAccessibleMethod('getCountOfProposal');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -575,26 +607,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfTaskDelivery();
+        $method = $this->getAccessibleMethod('getCountOfTaskDelivery');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfTaskDelivery($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfTaskDelivery(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfTaskDelivery(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -624,7 +661,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfTaskDelivery();
+        $method = $this->getAccessibleMethod('getCountOfTaskDelivery');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -674,26 +712,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfTaskGetReward();
+        $method = $this->getAccessibleMethod('getCountOfTaskGetReward');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfTaskGetReward($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfTaskGetReward(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfTaskGetReward(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -723,7 +766,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfTaskGetReward();
+        $method = $this->getAccessibleMethod('getCountOfTaskGetReward');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -771,26 +815,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfProjectDelivery();
+        $method = $this->getAccessibleMethod('getCountOfProjectDelivery');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfProjectDelivery($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfProjectDelivery(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfProjectDelivery(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -823,7 +872,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfProjectDelivery();
+        $method = $this->getAccessibleMethod('getCountOfProjectDelivery');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -869,26 +919,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfProjectGetRewards();
+        $method = $this->getAccessibleMethod('getCountOfProjectGetRewards');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfProjectGetRewards($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
         if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfProjectGetRewards(null, $startTime);
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
         if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfProjectGetRewards(null, null, $userIds);
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -906,7 +961,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfProjectGetRewards();
+        $method = $this->getAccessibleMethod('getCountOfProjectGetRewards');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -952,26 +1008,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfRating();
+        $method = $this->getAccessibleMethod('getCountOfRating');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfRating($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfRating(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfRating(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -990,7 +1051,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfRating();
+        $method = $this->getAccessibleMethod('getCountOfRating');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -1036,26 +1098,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfAcceptReorder();
+        $method = $this->getAccessibleMethod('getCountOfAcceptReorder');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfAcceptReorder($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfAcceptReorder(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfAcceptReorder(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -1086,7 +1153,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfAcceptReorder();
+        $method = $this->getAccessibleMethod('getCountOfAcceptReorder');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -1125,24 +1193,29 @@ class WorkerReputationCountTest extends TestCase
         $userIds = [$createData['user1']->id]; // user1 を明示的に指定するようにする
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfSettingThumbnail();
+        $method = $this->getAccessibleMethod('getCountOfSettingThumbnail');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals(1, $records[0]->count); // user1
             $this->assertEquals(1, $records[1]->count); // user2
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfSettingThumbnail($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 の件数が取得されること
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfSettingThumbnail(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user2']->id, $records[0]->user_id); // user2 の件数が取得されること
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfSettingThumbnail(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定された1ユーザーしか取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 しか取得されないこと
         }
@@ -1175,7 +1248,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfSettingThumbnail();
+        $method = $this->getAccessibleMethod('getCountOfSettingThumbnail');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -1214,24 +1288,29 @@ class WorkerReputationCountTest extends TestCase
         $userIds = [$createData['user1']->id]; // user1 を明示的に指定するようにする
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfSetProfile();
+        $method = $this->getAccessibleMethod('getCountOfSetProfile');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals(1, $records[0]->count); // user1
             $this->assertEquals(1, $records[1]->count); // user2
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfSetProfile($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 の件数が取得されること
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfSetProfile(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user2']->id, $records[0]->user_id); // user2 の件数が取得されること
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfSetProfile(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定された1ユーザーしか取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 しか取得されないこと
         }
@@ -1250,7 +1329,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfSetProfile();
+        $method = $this->getAccessibleMethod('getCountOfSetProfile');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -1286,24 +1366,29 @@ class WorkerReputationCountTest extends TestCase
         $userIds = [$createData['user1']->id]; // user1 を明示的に指定するようにする
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfSetSupplement();
+        $method = $this->getAccessibleMethod('getCountOfSetSupplement');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals(1, $records[0]->count); // user1
             $this->assertEquals(1, $records[1]->count); // user2
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfSetSupplement($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 の件数が取得されること
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfSetSupplement(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user2']->id, $records[0]->user_id); // user2 の件数が取得されること
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfSetSupplement(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定された1ユーザーしか取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 しか取得されないこと
         }
@@ -1321,7 +1406,8 @@ class WorkerReputationCountTest extends TestCase
         ]);
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfSetSupplement();
+        $method = $this->getAccessibleMethod('getCountOfSetSupplement');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
@@ -1373,26 +1459,31 @@ class WorkerReputationCountTest extends TestCase
         $expectMaxCount = $createData['targetCount']; // 10
 
         // Act & Assert
-        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 引数の指定がない場合
-            $records = $this->workerReputationCount->getCountOfReceiveReward();
+        $method = $this->getAccessibleMethod('getCountOfReceiveReward');
+        if (! ($hasFinishTime || $hasStartTime || $hasUserIds)) { // 条件の指定がない場合
+            $conditions = [];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount, $records[0]->count);
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasFinishTime) { // finishTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfReceiveReward($finishTime);
+        if ($hasFinishTime) { // 集計終了時が指定された場合
+            $conditions = ['finishTime' => $finishTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 0件の場合は取得されないこと
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
             $this->assertEquals(6, $records[0]->count); // 最初から数えて6つ
         }
-        if ($hasStartTime) { // startTime が渡された場合
-            $records = $this->workerReputationCount->getCountOfReceiveReward(null, $startTime);
+        if ($hasStartTime) { // 集計開始時が指定された場合
+            $conditions = ['startTime' => $startTime];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(2, $records);
             $this->assertEquals($expectMaxCount - 2, $records[0]->count); // 後ろから数えて -2
             $this->assertEquals(1, $records[1]->count);
         }
-        if ($hasUserIds) { // userIds が渡された場合
-            $records = $this->workerReputationCount->getCountOfReceiveReward(null, null, $userIds);
+        if ($hasUserIds) { // ユーザーIDが指定された場合
+            $conditions = ['userIds' => $userIds];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
             $this->assertCount(1, $records); // 指定のユーザーのみ取得されること
             $this->assertEquals($createData['user1']->id, $records[0]->user_id); // user1 が取得されること
         }
@@ -1460,7 +1551,8 @@ class WorkerReputationCountTest extends TestCase
         }
 
         // Act & Assert
-        $records = $this->workerReputationCount->getCountOfReceiveReward();
+        $method = $this->getAccessibleMethod('getCountOfReceiveReward');
+        $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
     }
 
