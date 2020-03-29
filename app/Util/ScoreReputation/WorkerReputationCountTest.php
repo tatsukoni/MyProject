@@ -133,6 +133,24 @@ class WorkerReputationCountTest extends TestCase
                     ScoreReputation::ID_WORKER_SET_SUPPLEMENT, // 【初】本人確認を設定する
                 ]
             ],
+            '全ての行動を指定する' => [
+                [
+                    ScoreReputation::ID_WORKER_REGISTRATION,
+                    ScoreReputation::ID_WORKER_GETTING_STARTED,
+                    ScoreReputation::ID_POST_QUESTION,
+                    ScoreReputation::ID_PROPOSAL,
+                    ScoreReputation::ID_TASK_DELIVERY,
+                    ScoreReputation::ID_TASK_GET_REWARD,
+                    ScoreReputation::ID_PROJECT_DELIVERY,
+                    ScoreReputation::ID_PROJECT_GET_REWARD,
+                    ScoreReputation::ID_WORKER_PROJECT_RATING,
+                    ScoreReputation::ID_PROJECT_ACCEPT_REORDER,
+                    ScoreReputation::ID_WORKER_SETTING_THUMBNAIL,
+                    ScoreReputation::ID_WORKER_SET_PROFILE,
+                    ScoreReputation::ID_WORKER_SET_SUPPLEMENT,
+                    ScoreReputation::ID_RECEIVE_REWARD
+                ]
+            ]
         ];
     }
 
@@ -162,6 +180,10 @@ class WorkerReputationCountTest extends TestCase
         }
     }
 
+    /**
+     * $conditions で指定される条件を変動させてテストを行う
+     * limit・offset は別でテストするので、ここには含めていない
+     */
     public function providerTestGetCount()
     {
         return
@@ -1554,6 +1576,56 @@ class WorkerReputationCountTest extends TestCase
         $method = $this->getAccessibleMethod('getCountOfReceiveReward');
         $records = $method->invoke($this->workerReputationCount, []);
         $this->assertEmpty($records); // 条件に合致しないデータは取得されないこと
+    }
+
+    public function providerTestLimitConditions()
+    {
+        return
+        [
+            'limit のみ指定された場合' => [
+                false
+            ],
+            'offset も指定された場合' => [
+                true
+            ]
+        ];
+    }
+
+    /**
+     * $conditions に limit・offset が指定されたケースをテストする
+     *
+     * @dataProvider providerTestLimitConditions
+     * @param bool $hasOffset
+     */
+    public function testLimitConditions($hasOffset)
+    {
+        // Arrange
+        // 「会員登録する」の行動対象に含まれる100ユーザーを作成する
+        for ($index = 1; $index <= 100; $index++) {
+            factory(User::class)->states('worker')->create([
+                'id' => $index,
+                'created' => $this->baseDatetimeDb
+            ]);
+        }
+
+        // Act & Assert
+        $method = $this->getAccessibleMethod('getCountOfRegistration');
+        if (! $hasOffset) { // limit のみ指定された場合
+            $conditions = ['limit' => 10];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
+            $this->assertCount(10, $records); // limit で指定された個数のみ取得されること
+            $this->assertEquals(1, $records[0]->user_id); // 頭のユーザーから取得されること
+            $this->assertEquals(10, $records[9]->user_id); // 頭から10番目のユーザーまで取得されること
+        } else { // offset も指定された場合
+            $conditions = [
+                'limit' => 10,
+                'offset' => 50
+            ];
+            $records = $method->invoke($this->workerReputationCount, $conditions);
+            $this->assertCount(10, $records); // limit で指定された個数のみ取得されること
+            $this->assertEquals(51, $records[0]->user_id); // offset が反映され、51番目のユーザーから取得されること
+            $this->assertEquals(60, $records[9]->user_id); // 60番目のユーザーまで取得されること
+        }
     }
 
     /**

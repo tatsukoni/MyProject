@@ -19,51 +19,79 @@ trait ReputationCountTrait
      */
     public function checkConditions(array $conditions): bool
     {
-        // $conditions の要素数が3以上でないか
-        if (count($conditions) > 3) {
-            return false;
-        }
-        // タイプミスの可能性を除外する
-        $targetKeys = ['startTime', 'finishTime', 'userIds']; // 左記以外のキー名は許可しない
+        // $conditions の中身が適切かどうかを判定する
+        // 1つでも適切でない要素が存在した場合 or 許可しないキー名の場合に false を返却
         foreach ($conditions as $key => $value) {
-            if (! in_array($key, $targetKeys)) {
+            if (! $this->checkConditionsValue($key, $value)) {
                 return false;
             }
         }
 
-        // 以降は中身を判定する
-        // startTime が Carbonインスタンス であるかどうか
+        // startTime > finishTime の場合にfalseを返却する
         if (array_key_exists('startTime', $conditions)
-            && ! ($conditions['startTime'] instanceof Carbon)
+            && array_key_exists('finishTime', $conditions)
         ) {
-            return false;
-        }
-        // finishTime が Carbonインスタンス であるかどうか
-        if (array_key_exists('finishTime', $conditions)
-            && ! ($conditions['finishTime'] instanceof Carbon)
-        ) {
-            return false;
-        }
-        // userIds が 配列型 であるかどうか
-        if (array_key_exists('userIds', $conditions)
-            && ! is_array($conditions['userIds'])
-        ) {
-            return false;
+            if ($conditions['startTime'] > $conditions['finishTime']) {
+                return false;
+            }
         }
 
         return true;
     }
 
     /**
+     * $conditions の中身が適切であるかどうかを判定する
+     *
+     * @param string $key
+     * @param $value
+     * @return bool
+     */
+    public function checkConditionsValue(string $key, $value): bool
+    {
+        switch ($key) {
+            case 'startTime':
+            case 'finishTime':
+                return ($value instanceof Carbon);
+            case 'userIds':
+                return (is_array($value));
+            case 'limit':
+            case 'offset':
+                return (is_int($value));
+            default:
+                // 上記以外のキー名は許可しない
+                return false;
+        }
+    }
+
+    /**
+     * SQLで日時比較を行う際、タイムゾーンを UTC に変更する
+     *
+     * @param Carbon $targetDate
+     * @return Carbon
+     */
+    public function getUtcDateTime(Carbon $targetDate): Carbon
+    {
+        if ($targetDate->utc) { // 引数のタイムゾーンが UTC の場合はそのまま返却
+            return $targetDate;
+        } else {
+            return $targetDate->setTimezone('UTC');
+        }
+    }
+
+    /**
      * ユーザーidが指定された際に、条件指定で用いるsql句を返却する
      *
-     * @param array $userIds
+     * @param array $conditions
      * @return string
      * @throws Exception
      */
-    public function getSqlUserIds(array $userIds): string
+    public function getSqlUserIds(array $conditions): string
     {
-        $userIds = implode(",", $userIds);
+        if (! array_key_exists('userIds', $conditions)) {
+            return '';
+        }
+
+        $userIds = implode(",", $conditions['userIds']);
         if (! preg_match("/^[0-9]+(,[0-9]+)*$/", $userIds)) {
             throw new Exception('$userIdsの配列内の値が数字ではありません');
         }
@@ -71,55 +99,57 @@ trait ReputationCountTrait
     }
 
     /**
-     * 対象のクエリ句を元に、条件指定で用いる開始日のsql句を返却する
+     * 集計開始日が指定された際に、条件指定で用いるsql句を返却する
      *
+     * @param array $conditions
      * @param string $targetQuery
-     * @param Carbon $startTime
      * @return string
      */
-    public function getSqlStartDay(string $targetQuery, Carbon $startTime): string
+    public function getSqlStartDay(array $conditions, string $targetQuery): string
     {
-        return "AND CONVERT_TZ({$targetQuery}, '+00:00', '+09:00') >= "."'".$startTime."'";
-    }
-
-    /**
-     * 対象のクエリ句を元に、条件指定で用いる終了日のsql句を返却する
-     *
-     * @param string $targetQuery
-     * @param Carbon $finishTime
-     * @return string
-     */
-    public function getSqlFininshDay(string $targetQuery, Carbon $finishTime): string
-    {
-        return "AND CONVERT_TZ({$targetQuery}, '+00:00', '+09:00') < "."'".$finishTime."'";
-    }
-
-    /**
-     * 複数の行動回数を取得するケースで、各行動を分割したレコードを返却する
-     *
-     * @param array $targetDatas stdClassが格納された配列
-     * @return array
-     */
-    public function getRecords(array $targetDatas): array
-    {
-        $records = [];
-
-        foreach ($targetDatas as $targetData) {
-            $arrayData = get_object_vars($targetData); // stdClassを配列に変換する
-            $userId = $arrayData['user_id'];
-            foreach ($arrayData as $column => $value) {
-                if ($column === 'user_id' || $value == 0) { // カラムが「user_id」の場合と、行動回数が「0」の場合をあらかじめ除く
-                    continue;
-                }
-
-                $obj = new stdClass(); // 各行動に対してstdオブジェクトを作成する
-                $obj->user_id = $userId;
-                $obj->reputation_id = $column;
-                $obj->count = $value;
-                array_push($records, $obj); // 作成されたstdオブジェクトごとに、返却する配列に格納する
-            }
+        if (! array_key_exists('startTime', $conditions)) {
+            return '';
         }
 
-        return $records;
+        return "AND $targetQuery >= "."'".$this->getUtcDateTime($conditions['startTime'])."'";
+    }
+
+    /**
+     * 集計終了日が指定された際に、条件指定で用いるsql句を返却する
+     *
+     * @param array $conditions
+     * @param string $targetQuery
+     * @return string
+     */
+    public function getSqlFinishDay(array $conditions, string $targetQuery): string
+    {
+        if (! array_key_exists('finishTime', $conditions)) {
+            return '';
+        }
+
+        return "AND $targetQuery < "."'".$this->getUtcDateTime($conditions['finishTime'])."'";
+    }
+
+    /**
+     * 分割条件が指定された際に、左記を表現するsql句を返却する
+     *
+     * @param array $conditions
+     * @param string $targetQuery
+     * @return string
+     */
+    public function getSqlChunkQuery(array $conditions): string
+    {
+        if (! array_key_exists('limit', $conditions)) {
+            return '';
+        }
+        $limit = $conditions['limit'];
+
+        // offset句の有無によって、返却値が変わる
+        if (array_key_exists('offset', $conditions)) { 
+            $offset = $conditions['offset'];
+            return "LIMIT {$limit} OFFSET {$offset}";
+        } else {
+            return "LIMIT {$limit}";
+        }
     }
 }

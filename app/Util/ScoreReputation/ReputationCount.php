@@ -2,8 +2,8 @@
 
 namespace App\Domain\ScoreReputation;
 
-use App\Domain\ScoreReputation\ClientReputationCount;
 use App\Domain\ScoreReputation\WorkerReputationCount;
+use App\Domain\ScoreReputation\ClientReputationCount;
 
 use Carbon\Carbon;
 use DB;
@@ -19,30 +19,13 @@ class ReputationCount
 {
     const INSERT_LIMIT = 5000; // 保存時に bulk insert するレコードの上限数
 
-    private $clientReputationCount;
-    private $workerReputationCount;
+    private $workerReputation;
+    private $clientReputation;
 
     public function __construct()
     {
-        $this->clientReputationCount = new ClientReputationCount();
-        $this->workerReputationCount = new WorkerReputationCount();
-    }
-
-    /**
-     * 全ての行動回数を取得する（クライアント）
-     *
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
-     * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
-     * @throws Exception
-     */
-    public function getAllClientReputationCount(
-        Carbon $finishTime = null,
-        Carbon $startTime = null,
-        array $userIds = null
-    ): array {
-        return $this->clientReputationCount->getAllReputationCount($finishTime, $startTime, $userIds);
+        $this->workerReputation = new WorkerReputationCount();
+        $this->clientReputation = new ClientReputationCount();
     }
 
     /**
@@ -52,52 +35,54 @@ class ReputationCount
      * $conditions = [
      *     'startTime' => Carbon / 集計開始時,
      *     'finishTime' => Carbon / 集計終了時,
-     *     'userIds' => array / 指定したいユーザーIDの配列
+     *     'userIds' => array / 指定したいユーザーIDの配列,
+     *     'limit' => int / 取得レコードの上限数（レコードを分割して取得したい場合に指定する),
+     *     'offset' => int / 取得レコードの取得開始位置（レコードを分割して取得したい場合に指定する),
      * ]
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
     public function getAllWorkerReputationCount(array $conditions): array
     {
-        return $this->workerReputationCount->getAllReputationCount($conditions);
+        return $this->workerReputation->getAllReputationCount($conditions);
     }
 
     /**
-     * 対象の行動回数を取得する（クライアント）
+     * 全ての行動回数を取得する（クライアント）
      *
-     * @param array $targetReputations
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $conditions 指定条件
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getTargetClientReputationCount(
-        array $targetReputations,
-        Carbon $finishTime = null,
-        Carbon $startTime = null,
-        array $userIds = null
-    ): array {
-        return $this->clientReputationCount->getTargetReputationCount($targetReputations, $finishTime, $startTime, $userIds);
+    public function getAllClientReputationCount(array $conditions): array
+    {
+        return $this->clientReputation->getAllReputationCount($conditions);
     }
 
     /**
      * 対象の行動回数を取得する（ワーカー）
      *
-     * @param array $targetReputations
-     * @param null|Carbon $startTime 集計開始時
-     * @param null|Carbon $finishTime 集計終了時
-     * @param null|array $userIds ユーザーIDの配列
+     * @param array $targetReputations 対象の行動
+     * @param array $conditions 指定条件
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getTargetWorkerReputationCount(
-        array $targetReputations,
-        Carbon $finishTime = null,
-        Carbon $startTime = null,
-        array $userIds = null
-    ): array {
-        return $this->workerReputationCount->getTargetReputationCount($targetReputations, $finishTime, $startTime, $userIds);
+    public function getTargetWorkerReputationCount(array $targetReputations, array $conditions): array
+    {
+        return $this->workerReputation->getTargetReputationCount($targetReputations, $conditions);
+    }
+
+    /**
+     * 対象の行動回数を取得する（クライアント）
+     *
+     * @param array $targetReputations 対象の行動
+     * @param array $conditions 指定条件
+     * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
+     * @throws Exception
+     */
+    public function getTargetClientReputationCount(array $targetReputations, array $conditions): array
+    {
+        return $this->clientReputation->getTargetReputationCount($targetReputations, $conditions);
     }
 
     /**

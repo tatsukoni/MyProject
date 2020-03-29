@@ -2,8 +2,6 @@
 
 namespace App\Domain\ScoreReputation;
 
-use App\Domain\ScoreReputation\ReputationCountInterface;
-use App\Domain\ScoreReputation\ReputationCountTrait;
 use App\Models\ScoreReputation;
 
 use Carbon\Carbon;
@@ -44,7 +42,7 @@ class WorkerReputationCount implements ReputationCountInterface
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getAllReputationCount(array $conditions): array 
+    public function getAllReputationCount(array $conditions): array
     {
         if (! $this->checkConditions($conditions)) {
             throw new Exception('引数で渡された$conditionsが適切でありません');
@@ -52,7 +50,7 @@ class WorkerReputationCount implements ReputationCountInterface
         $records = [];
 
         // 全ての行動回数を返却する
-        foreach (self::TARGET_REPUTATION_METHODS as $targetReputation => $targetMethod) {
+        foreach (array_values(self::TARGET_REPUTATION_METHODS) as $targetMethod) {
             $records = array_merge($records, $this->$targetMethod($conditions));
         }
 
@@ -67,7 +65,8 @@ class WorkerReputationCount implements ReputationCountInterface
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
      * @throws Exception
      */
-    public function getTargetReputationCount(array $targetReputations, array $conditions): array {
+    public function getTargetReputationCount(array $targetReputations, array $conditions): array
+    {
         if (! $this->checkConditions($conditions)) {
             throw new Exception('引数で渡された$conditionsが適切でありません');
         }
@@ -86,6 +85,7 @@ class WorkerReputationCount implements ReputationCountInterface
 
     /**
      * 【初】会員登録したかどうかを取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions 指定条件
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -93,21 +93,14 @@ class WorkerReputationCount implements ReputationCountInterface
      */
     private function getCountOfRegistration(array $conditions): array
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'u.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'u.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('u.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('u.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_WORKER_REGISTRATION;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', 1 as 'count'
 FROM users u
@@ -117,6 +110,7 @@ WHERE u.view_mode = 'contract'
     {$sqlUserIds}
     {$sqlStartDay}
     {$sqlFinishDay}
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -124,6 +118,7 @@ __SQL__;
 
     /**
      * 【初】開始準備済みかどうかを取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -131,21 +126,14 @@ __SQL__;
      */
     private function getCountOfGettingStarted(array $conditions): array
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'u.modified');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'u.modified');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('u.modified', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('u.modified', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_WORKER_GETTING_STARTED;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', 1 as 'count'
 FROM users u
@@ -156,6 +144,7 @@ WHERE u.view_mode = 'contract'
     {$sqlUserIds}
     {$sqlStartDay}
     {$sqlFinishDay}
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -163,6 +152,7 @@ __SQL__;
 
     /**
      * 仕事に質問を投稿した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -170,21 +160,14 @@ __SQL__;
      */
     private function getCountOfPostQuestion(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'th.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'th.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('th.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('th.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_POST_QUESTION;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(th.id) as 'count'
 FROM users u
@@ -201,6 +184,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -208,6 +192,7 @@ __SQL__;
 
     /**
      * 仕事に応募した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -215,21 +200,14 @@ __SQL__;
      */
     private function getCountOfProposal(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'jr.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'jr.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('jr.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('jr.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_PROPOSAL;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(jr.id) as 'count'
 FROM users u
@@ -243,6 +221,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -250,6 +229,7 @@ __SQL__;
 
     /**
      * タスク：納品した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -257,21 +237,14 @@ __SQL__;
      */
     private function getCountOfTaskDelivery(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'tt.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'tt.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('tt.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('tt.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_TASK_DELIVERY;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(tt.id) as 'count'
 FROM users u
@@ -285,6 +258,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -292,6 +266,7 @@ __SQL__;
 
     /**
      * タスク：報酬を獲得した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -299,21 +274,14 @@ __SQL__;
      */
     private function getCountOfTaskGetReward(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'w.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'w.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('w.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('w.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_TASK_GET_REWARD;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(w.id) as 'count'
 FROM users u
@@ -329,6 +297,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -336,6 +305,7 @@ __SQL__;
 
     /**
      * プロジェクト：納品した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -343,21 +313,14 @@ __SQL__;
      */
     private function getCountOfProjectDelivery(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 't.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 't.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('t.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('t.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_PROJECT_DELIVERY;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(t.id) as 'count'
 FROM users u
@@ -371,6 +334,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -378,6 +342,7 @@ __SQL__;
 
     /**
      * プロジェクト：報酬を獲得した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -385,21 +350,14 @@ __SQL__;
      */
     private function getCountOfProjectGetRewards(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        // 指定条件に基づき、条件指定句を変化させる
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 't.modified');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 't.modified');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('t.modified', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('t.modified', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_PROJECT_GET_REWARD;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(t.id) as 'count'
 FROM users u
@@ -414,6 +372,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -421,6 +380,7 @@ __SQL__;
 
     /**
      * プロジェクト：評価した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -428,21 +388,13 @@ __SQL__;
      */
     private function getCountOfRating(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'r.modified');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'r.modified');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('r.modified', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('r.modified', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_WORKER_PROJECT_RATING;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(r.id) as 'count'
 FROM users u
@@ -455,6 +407,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -462,6 +415,7 @@ __SQL__;
 
     /**
      * プロジェクト：再受注した回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -469,21 +423,13 @@ __SQL__;
      */
     private function getCountOfAcceptReorder(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 't.modified');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 't.modified');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('t.modified', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('t.modified', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_PROJECT_ACCEPT_REORDER;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(t.id) as 'count'
 FROM users u
@@ -497,6 +443,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -504,6 +451,7 @@ __SQL__;
 
     /**
      * 【初】アイコンが設定されているかどうかを取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -511,21 +459,13 @@ __SQL__;
      */
     private function getCountOfSettingThumbnail(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'thumbnail.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'thumbnail.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('thumbnail.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('thumbnail.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_WORKER_SETTING_THUMBNAIL;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', 1 as 'count'
 FROM users u
@@ -539,6 +479,7 @@ WHERE u.view_mode = 'contract'
     AND u.active = 1
     AND u.resigned = 0
     {$sqlUserIds}
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -546,6 +487,7 @@ __SQL__;
 
     /**
      * 【初】自己紹介が設定されているかどうかを取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -553,21 +495,13 @@ __SQL__;
      */
     private function getCountOfSetProfile(array $conditions): array
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'sp.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'sp.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('sp.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('sp.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_WORKER_SET_PROFILE;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', 1 as 'count'
 FROM users u
@@ -579,6 +513,7 @@ WHERE u.view_mode = 'contract'
     AND u.active = 1
     AND u.resigned = 0
     {$sqlUserIds}
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -586,6 +521,7 @@ __SQL__;
 
     /**
      * 【初】本人確認を設定したかどうかを取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -593,21 +529,13 @@ __SQL__;
      */
     private function getCountOfSetSupplement(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'u.modified');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'u.modified');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('u.modified', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('u.modified', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_WORKER_SET_SUPPLEMENT;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', 1 as 'count'
 FROM users u
@@ -619,6 +547,7 @@ WHERE u.view_mode = 'contract'
     {$sqlStartDay}
     {$sqlFinishDay}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
@@ -626,6 +555,7 @@ __SQL__;
 
     /**
      * 報酬を受け取った回数を取得する
+     * @SuppressWarnings(PHPMD.UnusedPrivateMethod)
      *
      * @param array $conditions
      * @return array stdClassに格納したuser_id（ユーザーID）とreputation_id（行動ID）とcount（行動数）の配列
@@ -633,21 +563,13 @@ __SQL__;
      */
     private function getCountOfReceiveReward(array $conditions)
     {
-        $sqlUserIds = '';
-        $sqlStartDay = '';
-        $sqlFinishDay = '';
+        $sqlUserIds = $this->getSqlUserIds($conditions);
+        $sqlStartDay = $this->getSqlStartDay($conditions, 'pl.created');
+        $sqlFinishDay = $this->getSqlFinishDay($conditions, 'pl.created');
+        $sqlChunkQuery = $this->getSqlChunkQuery($conditions);
 
-        if (array_key_exists('userIds', $conditions)) {
-            $sqlUserIds = $this->getSqlUserIds($conditions['userIds']);
-        }
-        if (array_key_exists('startTime', $conditions)) {
-            $sqlStartDay = $this->getSqlStartDay('pl.created', $conditions['startTime']);
-        }
-        if (array_key_exists('finishTime', $conditions)) {
-            $sqlFinishDay = $this->getSqlFininshDay('pl.created', $conditions['finishTime']);
-        }
         $reputationId = ScoreReputation::ID_RECEIVE_REWARD;
-
+        // 対象のSQL
         $sql = <<<__SQL__
 SELECT u.id as 'user_id', {$reputationId} as 'reputation_id', count(pd.id) as 'count'
 FROM users u
@@ -665,6 +587,7 @@ WHERE u.view_mode = 'contract'
     AND u.resigned = 0
     {$sqlUserIds}
 GROUP BY u.id
+{$sqlChunkQuery}
 __SQL__;
 
         return DB::select($sql);
